@@ -6,6 +6,7 @@ export const B = {
   AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, COBBLE: 4, PLANK: 5, LOG: 6, LEAVES: 7,
   SAND: 8, GLASS: 9, WATER: 10, SNOW: 11, BEDROCK: 12, COAL_ORE: 13, IRON_ORE: 14, DIAMOND_ORE: 15,
   WOOL: 16, CRAFTING_TABLE: 17, STONE_BRICK: 18, IRON_BLOCK: 19, DIAMOND_BLOCK: 20,
+  ICE: 21,
 };
 
 export const TILE = {
@@ -13,6 +14,7 @@ export const TILE = {
   LEAVES: 8, SAND: 9, GLASS: 10, WATER: 11, SNOW: 12, SNOW_SIDE: 13, BEDROCK: 14,
   COAL: 15, IRON: 16, DIAMOND: 17, WOOL: 18,
   CRAFTING_TOP: 19, CRAFTING_SIDE: 20, STONE_BRICK: 21, IRON_BLOCK: 22, DIAMOND_BLOCK: 23,
+  ICE: 24,
 };
 
 // def: {name, top, bottom, side (tile ids), solid (collision), opaque (face culling), breakable}
@@ -41,6 +43,7 @@ def(B.CRAFTING_TABLE, 'Crafting Table', TILE.CRAFTING_TOP, TILE.PLANK, TILE.CRAF
 def(B.STONE_BRICK, 'Stone Bricks', TILE.STONE_BRICK, TILE.STONE_BRICK, TILE.STONE_BRICK);
 def(B.IRON_BLOCK, 'Iron Block', TILE.IRON_BLOCK, TILE.IRON_BLOCK, TILE.IRON_BLOCK);
 def(B.DIAMOND_BLOCK, 'Diamond Block', TILE.DIAMOND_BLOCK, TILE.DIAMOND_BLOCK, TILE.DIAMOND_BLOCK);
+def(B.ICE, 'Ice', TILE.ICE, TILE.ICE, TILE.ICE, { slip: 0.98 });
 
 export const isSolid = (id) => !!(BLOCKS[id] && BLOCKS[id].solid);
 export const isOpaque = (id) => !!(BLOCKS[id] && BLOCKS[id].opaque);
@@ -144,6 +147,11 @@ export function buildAtlas() {
     [TILE.DIAMOND_BLOCK]: (x, y) => {
       if (x === 0 || y === 0 || x === 15 || y === 15) return [...jitter([52, 150, 145], 5), 255];
       return [...jitter([95, 216, 209], 6), 255];
+    },
+    [TILE.ICE]: (x, y) => {
+      const d = (x - y + 32) % 7;
+      if (d === 0 && rand() < 0.6) return [...jitter([225, 240, 252], 5), 255];
+      return [...jitter([155, 195, 232], 8), 255];
     },
   };
   const oreP = (tile) => (x, y) => {

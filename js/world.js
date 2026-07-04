@@ -51,13 +51,14 @@ export class World {
     h = Math.round(Math.max(4, Math.min(HEIGHT - 8, h)));
 
     const desert = fbm2(q, x * 0.0045 + 1000, z * 0.0045 - 1000, 2) > 0.28 && h > SEA && h < 52;
-    const snowy = h >= 62;
+    const cold = !desert && fbm2(q, x * 0.0028 + 2000, z * 0.0028 - 2000, 2) > 0.42;
+    const snowy = h >= 62 || (cold && h > SEA);
     let treeDensity = 0;
     if (!desert && !snowy && h > SEA + 1 && h < 58) {
       const forest = fbm2(p, x * 0.008 - 800, z * 0.008 + 800, 2);
       treeDensity = forest > 0.15 ? 0.035 : 0.005;
     }
-    return { h, desert, snowy, treeDensity };
+    return { h, desert, snowy, cold, treeDensity };
   }
 
   caveAt(x, y, z) {
@@ -83,7 +84,7 @@ export class World {
     for (let lz = 0; lz < CHUNK; lz++) {
       for (let lx = 0; lx < CHUNK; lx++) {
         const wx = baseX + lx, wz = baseZ + lz;
-        const { h, desert, snowy } = colAt(lx, lz);
+        const { h, desert, snowy, cold } = colAt(lx, lz);
         const beach = h <= SEA + 1;
         for (let y = 0; y < HEIGHT; y++) {
           let id = B.AIR;
@@ -107,7 +108,7 @@ export class World {
               else id = B.GRASS;
             }
           } else if (y <= SEA) {
-            id = B.WATER;
+            id = (y === SEA && cold) ? B.ICE : B.WATER; // frozen lakes in cold biomes
           }
           data[lx + lz * CHUNK + y * CHUNK * CHUNK] = id;
         }

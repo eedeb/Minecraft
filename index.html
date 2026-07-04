@@ -30,10 +30,15 @@
       <button id="playBtn" class="mc-btn">▶ Play</button>
       <button id="newWorldBtn" class="mc-btn">✦ New World</button>
       <div class="controls">
-        <div><b>WASD</b> move &nbsp; <b>Space</b> jump/swim &nbsp; <b>Shift</b> sprint</div>
+        <div><b>WASD</b> move &nbsp; <b>Space</b> jump/swim &nbsp; <b>Shift</b> sneak</div>
+        <div><b>Double-tap W</b> or <b>Ctrl</b> sprint</div>
         <div><b>Hold left click</b> mine / attack &nbsp; <b>Right click</b> place / eat</div>
         <div><b>E</b> inventory &amp; crafting &nbsp; <b>1–9 / scroll</b> hotbar</div>
         <div><b>F</b> toggle fly &nbsp; <b>F3</b> debug &nbsp; <b>Esc</b> pause</div>
+      </div>
+      <div class="prefs">
+        <label>Sensitivity <input type="range" id="sensSlider" min="10" max="200" step="5" value="100"> <span id="sensVal">100%</span></label>
+        <label><input type="checkbox" id="bobToggle" checked> View bobbing</label>
       </div>
       <p class="seed" id="seedLabel"></p>
       <p class="hint">World auto-saves in your browser. Watch out for zombies at night!</p>

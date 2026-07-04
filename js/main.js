@@ -15,8 +15,10 @@ import { Inventory } from './inventory.js';
 import { DropManager } from './drops.js';
 
 const SAVE_KEY = 'webcraft_save_v1';
+const PREFS_KEY = 'webcraft_prefs_v1';
 const DAY_LEN = 300; // seconds per full day/night cycle
-const REACH = 6;
+const REACH = 4.5;   // Minecraft block reach
+const MOB_REACH = 3; // Minecraft entity reach
 
 // ---------------------------------------------------------------------------
 // Save / load
@@ -27,6 +29,16 @@ function loadSave() {
     if (raw) return JSON.parse(raw);
   } catch (e) { /* corrupted save */ }
   return null;
+}
+
+// user preferences (sensitivity, view bobbing)
+let prefs = { sens: 100, bob: true };
+try {
+  const raw = localStorage.getItem(PREFS_KEY);
+  if (raw) prefs = { ...prefs, ...JSON.parse(raw) };
+} catch (e) { }
+function savePrefs() {
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) { }
 }
 
 const params = new URLSearchParams(location.search);
@@ -45,7 +57,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.rotation.order = 'YXZ';
 
 const ambient = new THREE.AmbientLight(0xffffff, 0.7);
@@ -123,12 +135,20 @@ const spawnPoint = world.findSpawn();
 const player = new Player(world, spawnPoint);
 if (saved && saved.player) {
   player.pos = { ...saved.player.pos };
+  player.prevPos = { ...saved.player.pos };
   player.yaw = saved.player.yaw || 0;
   player.pitch = saved.player.pitch || 0;
   player.hp = saved.player.hp ?? 20;
 }
 let timeOfDay = saved?.timeOfDay ?? 0.28;
 let selected = saved?.player?.sel ?? 0;
+
+// Minecraft sensitivity curve: f = sens*0.6+0.2; rotation = delta * f^3 * 8 * 0.15deg
+function applySensitivity() {
+  const f = (prefs.sens / 100) * 0.6 + 0.2;
+  player.lookFactor = f * f * f * 8 * 0.15 * Math.PI / 180;
+}
+applySensitivity();
 
 const inventory = Inventory.from(saved?.inventory);
 const isNewPlayer = !saved?.inventory;
@@ -640,6 +660,23 @@ document.getElementById('playBtn').addEventListener('click', () => {
   initAudio();
   canvas.requestPointerLock();
 });
+const sensSlider = document.getElementById('sensSlider');
+const sensVal = document.getElementById('sensVal');
+const bobToggle = document.getElementById('bobToggle');
+sensSlider.value = prefs.sens;
+sensVal.textContent = prefs.sens + '%';
+bobToggle.checked = prefs.bob;
+sensSlider.addEventListener('input', () => {
+  prefs.sens = +sensSlider.value;
+  sensVal.textContent = prefs.sens + '%';
+  applySensitivity();
+  savePrefs();
+});
+bobToggle.addEventListener('change', () => {
+  prefs.bob = bobToggle.checked;
+  savePrefs();
+});
+
 document.getElementById('newWorldBtn').addEventListener('click', () => {
   if (!confirm('Delete this world and generate a new one?')) return;
   try { localStorage.removeItem(SAVE_KEY); } catch (e) { }
@@ -668,6 +705,7 @@ document.addEventListener('mousemove', (e) => {
   if (locked) player.look(e.movementX, e.movementY);
 });
 
+let lastWTap = -1;
 document.addEventListener('keydown', (e) => {
   if (invOpen && (e.code === 'KeyE' || e.code === 'Escape')) {
     e.preventDefault();
@@ -676,6 +714,12 @@ document.addEventListener('keydown', (e) => {
   }
   if (!isLocked()) return;
   if (['Space', 'ArrowUp', 'ArrowDown', 'F3', 'KeyE'].includes(e.code)) e.preventDefault();
+  // double-tap W to sprint (Ctrl+W is eaten by browsers)
+  if (e.code === 'KeyW' && !e.repeat) {
+    const now = performance.now() / 1000;
+    if (now - lastWTap < 0.35) player.wantSprint = true;
+    lastWTap = now;
+  }
   keys.add(e.code);
   if (e.code === 'KeyF') player.fly = !player.fly;
   if (e.code === 'F3') debugEl.classList.toggle('show');
@@ -763,7 +807,8 @@ function finishBreak(hit, info) {
     const d = info.drop(Math.random());
     if (d) drops.spawn(d[0], d[1], hit.x + 0.5, hit.y + 0.35, hit.z + 0.5);
   }
-  world.setBlock(hit.x, hit.y, hit.z, B.AIR);
+  // ice melts back into water below sea level
+  world.setBlock(hit.x, hit.y, hit.z, (hit.id === B.ICE && hit.y <= SEA) ? B.WATER : B.AIR);
   const c = avgColors[hit.id] || [0.5, 0.5, 0.5];
   particles.burst(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, c, 14, 3.2);
   sfx.break();
@@ -776,7 +821,7 @@ function updateMining(dt) {
 
   const eye = player.eye();
   const dir = player.forwardDir();
-  const mobHit = mobs.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, 3.5);
+  const mobHit = mobs.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, MOB_REACH);
   const hit = currentTarget();
 
   // attack mobs when the crosshair is on one
@@ -936,6 +981,7 @@ const clock = new THREE.Clock();
 let fps = 60, fpsSmooth = 60;
 let debugT = 0;
 let simTime = 0;
+let bobPhase = 0, bobAmp = 0;
 
 function animate() {
   requestAnimationFrame(animate);
@@ -965,13 +1011,22 @@ function frame(dt) {
     }
   }
 
-  // camera follows player eye
+  // camera follows player eye (interpolated between physics ticks)
   const eye = player.eye();
-  camera.position.set(eye.x, eye.y, eye.z);
-  camera.rotation.set(player.pitch, player.yaw, 0);
 
-  // sprint FOV
-  const targetFov = player.sprinting ? 82 : 75;
+  // view bobbing: vertical oscillation + slight roll, scaled by speed
+  const hspd = Math.hypot(player.vel.x, player.vel.z);
+  const bobTarget = (prefs.bob && player.onGround && !player.fly && hspd > 0.5) ? Math.min(1, hspd / 4.3) : 0;
+  bobAmp += (bobTarget - bobAmp) * Math.min(1, 10 * dt);
+  if (bobTarget > 0) bobPhase += dt * (1.5 + hspd * 1.35);
+  const bobY = Math.abs(Math.sin(bobPhase * Math.PI)) * 0.05 * bobAmp;
+  const bobRoll = Math.sin(bobPhase * Math.PI) * 0.012 * bobAmp;
+
+  camera.position.set(eye.x, eye.y + bobY, eye.z);
+  camera.rotation.set(player.pitch, player.yaw, bobRoll);
+
+  // sprint FOV (70 base, +10% sprinting)
+  const targetFov = player.sprinting ? 77 : 70;
   if (Math.abs(camera.fov - targetFov) > 0.1) {
     camera.fov += (targetFov - camera.fov) * Math.min(1, 10 * dt);
     camera.updateProjectionMatrix();

@@ -133,6 +133,15 @@ html, body {
 }
 .controls b { color: #ffd76e; }
 
+.prefs {
+  margin-top: 16px; font-size: 12px; color: #c9c9c9;
+  display: flex; gap: 22px; justify-content: center; align-items: center;
+}
+.prefs label { display: flex; align-items: center; gap: 7px; }
+.prefs input[type="range"] { width: 110px; accent-color: #9ad06a; }
+.prefs input[type="checkbox"] { accent-color: #9ad06a; }
+#sensVal { color: #ffd76e; min-width: 38px; text-align: left; }
+
 .seed { margin-top: 14px; font-size: 11px; color: #777; }
 .hint { margin-top: 6px; font-size: 11px; color: #6f8f6f; }
 

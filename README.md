@@ -13,7 +13,7 @@ A 3D Minecraft clone that runs entirely in the browser. No build step, no depend
 - **Food** — eat porkchops, beef, mutton, and apples (right-click) to heal
 - **Day/night cycle** — moving sun and moon, stars, sunsets, and fog that matches the sky
 - **Survival elements** — health, fall damage, zombie attacks with knockback, death & respawn
-- **Physics** — gravity, jumping, swimming, sprinting, and creative flight
+- **Minecraft Java physics** — fixed 20-tick simulation with authentic per-tick gravity/friction formulas, 1.25-block floaty jumps, sprinting (double-tap W), sneaking with edge protection, slippery ice, view bobbing, and Minecraft's mouse sensitivity curve (adjustable on the pause screen)
 - **World persistence** — your edits, inventory, position, and time of day auto-save to `localStorage`
 - **Juice** — block-break particles, procedural sound effects, ambient-occlusion shading, held-item viewmodel, damage vignette
 
@@ -26,7 +26,8 @@ A 3D Minecraft clone that runs entirely in the browser. No build step, no depend
 | **W A S D** | Move |
 | **Mouse** | Look |
 | **Space** | Jump / swim up |
-| **Shift** | Sprint (or descend while flying) |
+| **Shift** | Sneak — slower, lower camera, won't fall off edges (descend while flying) |
+| **Double-tap W / Ctrl** | Sprint |
 | **Hold left click** | Mine block / attack mob |
 | **Right click** | Place block / eat food / use crafting table |
 | **E** | Open inventory & 2×2 crafting |

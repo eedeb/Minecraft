@@ -6,6 +6,20 @@ import { B, isSolid } from './blocks.js';
 const EPS = 0.001;
 const AXES = ['x', 'z', 'y'];
 
+function boxCollides(world, e) {
+  const x0 = Math.floor(e.pos.x - e.half), x1 = Math.floor(e.pos.x + e.half);
+  const y0 = Math.floor(e.pos.y), y1 = Math.floor(e.pos.y + e.height);
+  const z0 = Math.floor(e.pos.z - e.half), z1 = Math.floor(e.pos.z + e.half);
+  for (let by = y0; by <= y1; by++)
+    for (let bz = z0; bz <= z1; bz++)
+      for (let bx = x0; bx <= x1; bx++)
+        if (isSolid(world.getBlock(bx, by, bz))) return true;
+  return false;
+}
+
+// Entities may set e.stepHeight (blocks) + e.stepAssistGround (bool) to
+// automatically step up low obstacles (Minecraft: 0.6). Full 1-block walls
+// still stop movement.
 export function moveEntity(world, e, dt) {
   let onGround = false, hitWall = false;
   const maxDisp = Math.max(Math.abs(e.vel.x), Math.abs(e.vel.y), Math.abs(e.vel.z)) * dt;
@@ -24,6 +38,7 @@ export function moveEntity(world, e, dt) {
 
       let collided = false;
       let bound = d > 0 ? Infinity : -Infinity;
+      let stepTop = -Infinity;
       for (let by = y0; by <= y1; by++) {
         for (let bz = z0; bz <= z1; bz++) {
           for (let bx = x0; bx <= x1; bx++) {
@@ -31,10 +46,21 @@ export function moveEntity(world, e, dt) {
             collided = true;
             const cell = a === 'x' ? bx : a === 'y' ? by : bz;
             bound = d > 0 ? Math.min(bound, cell) : Math.max(bound, cell + 1);
+            if (a !== 'y') stepTop = Math.max(stepTop, by + 1);
           }
         }
       }
       if (collided) {
+        // try stepping up low obstacles instead of stopping
+        if (a !== 'y' && e.stepHeight > 0 && e.stepAssistGround) {
+          const lift = stepTop - e.pos.y;
+          if (lift > 0 && lift <= e.stepHeight + 1e-4) {
+            const savedY = e.pos.y;
+            e.pos.y = stepTop + EPS;
+            if (!boxCollides(world, e)) continue; // stepped up, keep the move
+            e.pos.y = savedY;
+          }
+        }
         if (a === 'y') {
           if (d > 0) e.pos.y = bound - e.height - EPS;
           else { e.pos.y = bound + EPS; onGround = true; }

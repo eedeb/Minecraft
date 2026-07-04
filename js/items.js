@@ -88,6 +88,7 @@ export const MINING = {
   [B.GLASS]: { hand: 0.45, tool: null, tier: 0, drop: () => null },
   [B.WOOL]: { hand: 1.1, tool: null, tier: 0, drop: () => [B.WOOL, 1] },
   [B.CRAFTING_TABLE]: { hand: 2.5, tool: 'axe', tier: 0, drop: () => [B.CRAFTING_TABLE, 1] },
+  [B.ICE]: { hand: 1.0, tool: 'pickaxe', tier: 0, drop: () => null },
   [B.STONE_BRICK]: { hand: 7.5, tool: 'pickaxe', tier: 1, drop: () => [B.STONE_BRICK, 1] },
   [B.IRON_BLOCK]: { hand: 15, tool: 'pickaxe', tier: 2, drop: () => [B.IRON_BLOCK, 1] },
   [B.DIAMOND_BLOCK]: { hand: 15, tool: 'pickaxe', tier: 3, drop: () => [B.DIAMOND_BLOCK, 1] },
