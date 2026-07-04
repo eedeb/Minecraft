@@ -733,7 +733,7 @@ function renderInvScreen() {
   craftTitleEl.textContent = craftSize === 3 ? 'Crafting Table (3×3)' : 'Crafting (2×2)';
   craftGridEl.style.display = 'grid';
   craftGridEl.style.gap = '4px';
-  craftGridEl.style.gridTemplateColumns = `repeat(${craftSize}, 46px)`;
+  craftGridEl.style.gridTemplateColumns = `repeat(${craftSize}, 42px)`;
   craftGridEl.innerHTML = '';
   for (let rr = 0; rr < craftSize; rr++)
     for (let cc = 0; cc < craftSize; cc++)
@@ -810,6 +810,30 @@ function isLocked() { return locked || forceStarted; }
 document.getElementById('playBtn').addEventListener('click', () => {
   initAudio();
   canvas.requestPointerLock();
+});
+
+// Fullscreen + Keyboard Lock: in fullscreen the browser lets us capture
+// shortcuts like Ctrl+W so sprinting can't close the tab.
+const fullscreenBtn = document.getElementById('fullscreenBtn');
+async function lockKeyboard() {
+  try {
+    if (navigator.keyboard && navigator.keyboard.lock) await navigator.keyboard.lock();
+  } catch (e) { /* unsupported browser */ }
+}
+fullscreenBtn.addEventListener('click', async () => {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await document.documentElement.requestFullscreen();
+  } catch (e) { }
+});
+document.addEventListener('fullscreenchange', () => {
+  if (document.fullscreenElement) {
+    lockKeyboard();
+    fullscreenBtn.textContent = '⛶ Exit Fullscreen';
+  } else {
+    if (navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock();
+    fullscreenBtn.textContent = '⛶ Fullscreen';
+  }
 });
 const sensSlider = document.getElementById('sensSlider');
 const sensVal = document.getElementById('sensVal');
@@ -894,7 +918,9 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   if (!isLocked()) return;
-  if (['Space', 'ArrowUp', 'ArrowDown', 'F3', 'KeyE'].includes(e.code)) e.preventDefault();
+  e.preventDefault(); // with keyboard lock active, keep every shortcut in-game
+  // with the keyboard locked (fullscreen), Esc reaches us instead of the browser
+  if (e.code === 'Escape') { document.exitPointerLock(); return; }
   // double-tap W to sprint (Ctrl+W is eaten by browsers)
   if (e.code === 'KeyW' && !e.repeat) {
     const now = performance.now() / 1000;
