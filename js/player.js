@@ -139,7 +139,8 @@ export class Player {
     const jump = keys.has('Space');
     const shift = keys.has('ShiftLeft') || keys.has('ShiftRight');
     this.sneaking = shift && !this.fly;
-    if (keys.has('ControlLeft') && f > 0) this.wantSprint = true;
+    // sprint is triggered only by double-tap W (modifier keys collide with
+    // browser/OS shortcuts like Cmd+W / Ctrl+W)
     if (f <= 0 || this.sneaking) this.wantSprint = false;
     this.sprinting = this.wantSprint && !this.fly && !this.inWater;
 

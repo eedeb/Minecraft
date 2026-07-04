@@ -48,6 +48,16 @@ const seed = params.has('seed') ? (parseInt(params.get('seed'), 10) | 0)
     : (Math.random() * 0xffffffff) | 0;
 const renderDist = Math.min(8, Math.max(2, parseInt(params.get('rd') || '4', 10) || 4));
 
+// drop ?seed from the URL after boot: the world saves under this seed, so
+// plain refreshes should load the save rather than force-regenerate
+if (params.has('seed')) {
+  try {
+    const q = new URLSearchParams(params);
+    q.delete('seed');
+    history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q.toString() : ''));
+  } catch (e) { }
+}
+
 // ---------------------------------------------------------------------------
 // Renderer / scene
 
@@ -873,8 +883,19 @@ newWorldBtn.addEventListener('click', () => {
   }
   clearTimeout(newWorldTimer);
   wipeSave = true;
-  try { localStorage.removeItem(SAVE_KEY); } catch (e) { }
-  location.href = location.pathname;
+  try {
+    // tell every other open game tab to stop saving the old world
+    localStorage.setItem('webcraft_wipe', String(Date.now()));
+    localStorage.removeItem(SAVE_KEY);
+  } catch (e) { }
+  // navigate with an explicit fresh seed: guarantees a new world even if a
+  // stale save somehow survives or reappears
+  location.href = location.pathname + '?seed=' + ((Math.random() * 0xffffffff) >>> 0);
+});
+
+// another tab hit New World: stop persisting this tab's (old) world
+window.addEventListener('storage', (e) => {
+  if (e.key === 'webcraft_wipe') wipeSave = true;
 });
 
 document.addEventListener('pointerlockchange', () => {

@@ -27,8 +27,8 @@ A 3D Minecraft clone that runs entirely in the browser. No build step, no depend
 | **Mouse** | Look |
 | **Space** | Jump / swim up |
 | **Shift** | Sneak — slower, lower camera, won't fall off edges (descend while flying) |
-| **Double-tap W / Ctrl** | Sprint (use fullscreen so Ctrl+W can't close the tab) |
-| **⛶ Fullscreen button** | Fullscreen + keyboard lock — captures Ctrl+W and other browser shortcuts while playing |
+| **Double-tap W** | Sprint (no modifier key — Ctrl/Cmd+W would fight the browser) |
+| **⛶ Fullscreen button** | Fullscreen + keyboard lock — captures most browser shortcuts while playing |
 | **Hold left click** | Mine block / attack mob |
 | **Right click** | Place block / eat food / use crafting table |
 | **E** | Open inventory & 2×2 crafting |
