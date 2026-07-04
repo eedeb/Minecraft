@@ -144,9 +144,11 @@ let timeOfDay = saved?.timeOfDay ?? 0.28;
 let selected = saved?.player?.sel ?? 0;
 
 // Minecraft sensitivity curve: f = sens*0.6+0.2; rotation = delta * f^3 * 8 * 0.15deg
+// (scaled down 0.35x — browser movementX reports far more units per cm than
+// Minecraft's raw mouse input, so unscaled 100% is unplayably fast)
 function applySensitivity() {
   const f = (prefs.sens / 100) * 0.6 + 0.2;
-  player.lookFactor = f * f * f * 8 * 0.15 * Math.PI / 180;
+  player.lookFactor = f * f * f * 8 * 0.15 * (Math.PI / 180) * 0.35;
 }
 applySensitivity();
 
@@ -826,8 +828,27 @@ bobToggle.addEventListener('change', () => {
   savePrefs();
 });
 
-document.getElementById('newWorldBtn').addEventListener('click', () => {
-  if (!confirm('Delete this world and generate a new one?')) return;
+// New World: two-click confirm (confirm() dialogs are unreliable in embedded
+// browsers) + suppress further saves so beforeunload can't resurrect the world.
+let wipeSave = false;
+let newWorldArmed = false;
+let newWorldTimer = 0;
+const newWorldBtn = document.getElementById('newWorldBtn');
+newWorldBtn.addEventListener('click', () => {
+  if (!newWorldArmed) {
+    newWorldArmed = true;
+    newWorldBtn.textContent = '⚠ Delete world? Click again';
+    newWorldBtn.classList.add('danger');
+    clearTimeout(newWorldTimer);
+    newWorldTimer = setTimeout(() => {
+      newWorldArmed = false;
+      newWorldBtn.textContent = '✦ New World';
+      newWorldBtn.classList.remove('danger');
+    }, 4000);
+    return;
+  }
+  clearTimeout(newWorldTimer);
+  wipeSave = true;
   try { localStorage.removeItem(SAVE_KEY); } catch (e) { }
   location.href = location.pathname;
 });
@@ -1127,6 +1148,7 @@ function updateDayNight(dt) {
 // Save
 
 function save() {
+  if (wipeSave) return; // world was just deleted via New World
   try {
     const edits = [];
     for (const [ck, m] of world.edits) edits.push([ck, [...m]]);
@@ -1183,13 +1205,13 @@ function frame(dt) {
   // camera follows player eye (interpolated between physics ticks)
   const eye = player.eye();
 
-  // view bobbing: vertical oscillation + slight roll, scaled by speed
+  // view bobbing: vertical oscillation + slight roll, paced like footsteps
   const hspd = Math.hypot(player.vel.x, player.vel.z);
   const bobTarget = (prefs.bob && player.onGround && !player.fly && hspd > 0.5) ? Math.min(1, hspd / 4.3) : 0;
-  bobAmp += (bobTarget - bobAmp) * Math.min(1, 10 * dt);
-  if (bobTarget > 0) bobPhase += dt * (1.5 + hspd * 1.35);
-  const bobY = Math.abs(Math.sin(bobPhase * Math.PI)) * 0.05 * bobAmp;
-  const bobRoll = Math.sin(bobPhase * Math.PI) * 0.012 * bobAmp;
+  bobAmp += (bobTarget - bobAmp) * Math.min(1, 8 * dt);
+  if (bobTarget > 0) bobPhase += dt * hspd * 0.45;
+  const bobY = Math.abs(Math.sin(bobPhase * Math.PI)) * 0.04 * bobAmp;
+  const bobRoll = Math.sin(bobPhase * Math.PI) * 0.007 * bobAmp;
 
   camera.position.set(eye.x, eye.y + bobY, eye.z);
   camera.rotation.set(player.pitch, player.yaw, bobRoll);
@@ -1290,6 +1312,7 @@ window.__game = {
     else if (btn === 2) inventory.rightClick(area, idx);
     else inventory.leftClick(area, idx);
   },
+  suppressSave: () => { wipeSave = true; },
   state: () => ({ breakingHeld, placingHeld, mining: mining && { ...mining }, invOpen, locked, forceStarted, punchCd }),
   setBreaking: (v) => { breakingHeld = v; },
   step: (dt = 0.05, n = 1) => { for (let i = 0; i < n; i++) frame(dt); },

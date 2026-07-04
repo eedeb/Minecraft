@@ -125,6 +125,8 @@ html, body {
   box-shadow: inset 2px 2px 0 rgba(255,255,255,0.35), inset -2px -2px 0 rgba(0,0,0,0.35);
 }
 .mc-btn:hover { background: linear-gradient(#8f9bd6, #6577c0); }
+.mc-btn.danger { background: linear-gradient(#c05555, #8f3a3a); }
+.mc-btn.danger:hover { background: linear-gradient(#d06060, #a04444); }
 .mc-btn:active { box-shadow: inset -2px -2px 0 rgba(255,255,255,0.2), inset 2px 2px 0 rgba(0,0,0,0.4); }
 
 .controls {
