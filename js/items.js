@@ -87,6 +87,10 @@ export const MINING = {
   [B.LEAVES]: { hand: 0.35, tool: null, tier: 0, drop: (r) => r < 0.08 ? [I.APPLE, 1] : null },
   [B.GLASS]: { hand: 0.45, tool: null, tier: 0, drop: () => null },
   [B.WOOL]: { hand: 1.1, tool: null, tier: 0, drop: () => [B.WOOL, 1] },
+  [B.CRAFTING_TABLE]: { hand: 2.5, tool: 'axe', tier: 0, drop: () => [B.CRAFTING_TABLE, 1] },
+  [B.STONE_BRICK]: { hand: 7.5, tool: 'pickaxe', tier: 1, drop: () => [B.STONE_BRICK, 1] },
+  [B.IRON_BLOCK]: { hand: 15, tool: 'pickaxe', tier: 2, drop: () => [B.IRON_BLOCK, 1] },
+  [B.DIAMOND_BLOCK]: { hand: 15, tool: 'pickaxe', tier: 3, drop: () => [B.DIAMOND_BLOCK, 1] },
 };
 
 // What happens if `heldId` mines `blockId`. null = unbreakable.
@@ -104,26 +108,89 @@ export function breakInfo(blockId, heldId) {
 }
 
 // ---------------------------------------------------------------------------
-// Recipes
+// Recipes (Minecraft-style grid crafting)
+// Shaped recipes have a pattern laid out in the grid; shapeless just need the
+// items anywhere. Recipes taller/wider than 2 need a crafting table (3x3).
+
+function shaped(out, n, shape, key) {
+  const pattern = shape.map(row => [...row].map(ch => (ch === '.' ? null : key[ch])));
+  const counts = new Map();
+  for (const row of pattern) for (const c of row) if (c != null) counts.set(c, (counts.get(c) || 0) + 1);
+  const h = pattern.length, w = pattern[0].length;
+  return { out, n, pattern, in: [...counts], needsTable: h > 2 || w > 2 };
+}
+
+function shapeless(out, n, items) {
+  const counts = new Map();
+  for (const id of items) counts.set(id, (counts.get(id) || 0) + 1);
+  return { out, n, shapeless: [...items].sort((a, b) => a - b), in: [...counts], needsTable: items.length > 4 };
+}
 
 const toolRecipes = [];
 {
-  const heads = { wood: [B.PLANK, 1], stone: [B.COBBLE, 1], iron: [I.IRON_INGOT, 1], diamond: [I.DIAMOND, 1] };
-  const shapes = { pickaxe: [3, 2], axe: [3, 2], shovel: [1, 2], sword: [2, 1] }; // [head count, stick count]
+  const heads = { wood: B.PLANK, stone: B.COBBLE, iron: I.IRON_INGOT, diamond: I.DIAMOND };
+  const shapes = {
+    pickaxe: ['MMM', '.S.', '.S.'],
+    axe: ['MM', 'MS', '.S'],
+    shovel: ['M', 'S', 'S'],
+    sword: ['M', 'M', 'S'],
+  };
   ['wood', 'stone', 'iron', 'diamond'].forEach((mn, i) => {
     for (const [tool, ids] of Object.entries(TOOL_IDS)) {
-      const [hc, sc] = shapes[tool];
-      toolRecipes.push({ out: ids[i], n: 1, in: [[heads[mn][0], hc], [I.STICK, sc]] });
+      toolRecipes.push(shaped(ids[i], 1, shapes[tool], { M: heads[mn], S: I.STICK }));
     }
   });
 }
 
 export const RECIPES = [
-  { out: B.PLANK, n: 4, in: [[B.LOG, 1]] },
-  { out: I.STICK, n: 4, in: [[B.PLANK, 2]] },
+  shaped(B.PLANK, 4, ['L'], { L: B.LOG }),
+  shaped(I.STICK, 4, ['P', 'P'], { P: B.PLANK }),
+  shaped(B.CRAFTING_TABLE, 1, ['PP', 'PP'], { P: B.PLANK }),
   ...toolRecipes,
-  { out: B.GLASS, n: 1, in: [[B.SAND, 1], [I.COAL, 1]] },
+  shaped(B.STONE_BRICK, 4, ['CC', 'CC'], { C: B.COBBLE }),
+  shapeless(B.GLASS, 1, [B.SAND, I.COAL]),
+  shaped(B.IRON_BLOCK, 1, ['III', 'III', 'III'], { I: I.IRON_INGOT }),
+  shapeless(I.IRON_INGOT, 9, [B.IRON_BLOCK]),
+  shaped(B.DIAMOND_BLOCK, 1, ['DDD', 'DDD', 'DDD'], { D: I.DIAMOND }),
+  shapeless(I.DIAMOND, 9, [B.DIAMOND_BLOCK]),
 ];
+
+// Match the crafting grid (row-major array of itemId|null, always 3x3)
+// against all recipes. Returns the recipe or null.
+export function matchGrid(cells, size = 3) {
+  let minR = size, maxR = -1, minC = size, maxC = -1;
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      if (cells[r * size + c] != null) {
+        minR = Math.min(minR, r); maxR = Math.max(maxR, r);
+        minC = Math.min(minC, c); maxC = Math.max(maxC, c);
+      }
+    }
+  }
+  if (maxR === -1) return null;
+  const h = maxR - minR + 1, w = maxC - minC + 1;
+
+  const placed = cells.filter(c => c != null).sort((a, b) => a - b);
+
+  for (const r of RECIPES) {
+    if (r.shapeless) {
+      if (placed.length === r.shapeless.length && placed.every((id, i) => id === r.shapeless[i])) return r;
+      continue;
+    }
+    const pat = r.pattern;
+    if (pat.length !== h || pat[0].length !== w) continue;
+    let ok = true, okMirror = true;
+    for (let rr = 0; rr < h && (ok || okMirror); rr++) {
+      for (let cc = 0; cc < w; cc++) {
+        const cell = cells[(minR + rr) * size + (minC + cc)];
+        if (cell !== pat[rr][cc]) ok = false;
+        if (cell !== pat[rr][w - 1 - cc]) okMirror = false;
+      }
+    }
+    if (ok || okMirror) return r;
+  }
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // Pixel-art icons (12x12 stencils rendered onto 16x16 canvases)

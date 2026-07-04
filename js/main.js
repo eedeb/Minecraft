@@ -10,7 +10,7 @@ import { MobManager } from './mobs.js';
 import { blockOverlapsEntity } from './physics.js';
 import { initAudio, sfx } from './sound.js';
 import { mulberry32 } from './noise.js';
-import { I, ITEMS, breakInfo, RECIPES, itemIcon, initItemIcons, itemDamage, TIER_NAMES } from './items.js';
+import { I, ITEMS, breakInfo, RECIPES, matchGrid, itemIcon, initItemIcons, itemDamage, TIER_NAMES } from './items.js';
 import { Inventory } from './inventory.js';
 import { DropManager } from './drops.js';
 
@@ -338,6 +338,10 @@ const invScreen = document.getElementById('invScreen');
 const invGrid = document.getElementById('invGrid');
 const invHotbar = document.getElementById('invHotbar');
 const craftList = document.getElementById('craftList');
+const craftGridEl = document.getElementById('craftGrid');
+const craftOutEl = document.getElementById('craftOut');
+const craftTitleEl = document.getElementById('craftTitle');
+const craftHintEl = document.getElementById('craftHint');
 document.getElementById('seedLabel').textContent = 'seed: ' + (seed >>> 0);
 
 let blockNameT = 0;
@@ -425,10 +429,16 @@ document.getElementById('respawnBtn').addEventListener('click', () => {
 // Inventory & crafting screen
 
 let invOpen = false;
+let craftSize = 2;                       // 2 = inventory grid, 3 = crafting table
+let craftCells = new Array(9).fill(null); // always 3x3 row-major; 2x2 mode uses rows/cols 0-1
+let craftCursor = null;                  // item id "picked up" for placing into the grid
 
-function openInventory() {
+function openInventory(tableMode = false) {
   if (player.dead) return;
   invOpen = true;
+  craftSize = tableMode ? 3 : 2;
+  craftCells.fill(null);
+  craftCursor = null;
   invScreen.classList.add('show');
   renderInvScreen();
   if (locked) document.exitPointerLock();
@@ -437,11 +447,50 @@ function openInventory() {
 function closeInventory(relock = true) {
   if (!invOpen) return;
   invOpen = false;
+  craftCursor = null;
   invScreen.classList.remove('show');
   if (relock && started && !player.dead) canvas.requestPointerLock();
 }
 
 document.getElementById('invClose').addEventListener('click', () => closeInventory());
+
+// how many of each item the current grid pattern consumes per craft
+function gridNeeds() {
+  const needs = new Map();
+  for (const c of craftCells) if (c != null) needs.set(c, (needs.get(c) || 0) + 1);
+  return needs;
+}
+
+function craftFromGrid() {
+  const r = matchGrid(craftCells, 3);
+  if (!r) return false;
+  const needs = gridNeeds();
+  for (const [id, n] of needs) if (inventory.count(id) < n) return false;
+  for (const [id, n] of needs) inventory.remove(id, n);
+  inventory.add(r.out, r.n);
+  sfx.craft();
+  toast('Crafted ' + ITEMS[r.out].name + (r.n > 1 ? ` ×${r.n}` : ''));
+  return true;
+}
+
+function autofillRecipe(r) {
+  if (r.needsTable && craftSize < 3) {
+    toast('Needs a crafting table (craft one, place it, right-click it)', 2.5);
+    return;
+  }
+  craftCells.fill(null);
+  if (r.pattern) {
+    for (let rr = 0; rr < r.pattern.length; rr++)
+      for (let cc = 0; cc < r.pattern[rr].length; cc++)
+        craftCells[rr * 3 + cc] = r.pattern[rr][cc];
+  } else {
+    r.shapeless.forEach((id, i) => {
+      craftCells[Math.floor(i / craftSize) * 3 + (i % craftSize)] = id;
+    });
+  }
+  craftCursor = null;
+  renderInvScreen();
+}
 
 function renderInvScreen() {
   // items owned
@@ -455,8 +504,8 @@ function renderInvScreen() {
   }
   for (const [id, n] of entries) {
     const el = document.createElement('div');
-    el.className = 'inv-item';
-    el.title = ITEMS[id].name + ' — click to assign to hotbar';
+    el.className = 'inv-item' + (craftCursor === id ? ' selected' : '');
+    el.title = ITEMS[id].name + ' — click to place in crafting grid, right-click to assign to hotbar';
     el.appendChild(iconCanvasFor(id, 36));
     if (n > 1 || ITEMS[id].kind !== 'tool') {
       const cnt = document.createElement('span');
@@ -464,7 +513,14 @@ function renderInvScreen() {
       cnt.textContent = n;
       el.appendChild(cnt);
     }
-    el.addEventListener('click', () => { inventory.assignToHotbar(id); });
+    el.addEventListener('click', () => {
+      craftCursor = craftCursor === id ? null : id;
+      renderInvScreen();
+    });
+    el.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      inventory.assignToHotbar(id);
+    });
     invGrid.appendChild(el);
   }
 
@@ -482,7 +538,65 @@ function renderInvScreen() {
     invHotbar.appendChild(el);
   }
 
-  // crafting
+  // crafting grid
+  craftTitleEl.textContent = craftSize === 3 ? 'Crafting Table (3×3)' : 'Crafting (2×2)';
+  craftGridEl.style.gridTemplateColumns = `repeat(${craftSize}, 50px)`;
+  craftGridEl.innerHTML = '';
+  for (let rr = 0; rr < craftSize; rr++) {
+    for (let cc = 0; cc < craftSize; cc++) {
+      const idx = rr * 3 + cc;
+      const id = craftCells[idx];
+      const cell = document.createElement('div');
+      cell.className = 'inv-slot craft-cell' + (id == null ? '' : ' filled');
+      if (id != null) cell.appendChild(iconCanvasFor(id, 36));
+      cell.addEventListener('click', () => {
+        if (craftCursor != null && craftCells[idx] !== craftCursor) craftCells[idx] = craftCursor;
+        else craftCells[idx] = null;
+        renderInvScreen();
+      });
+      cell.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        craftCells[idx] = null;
+        renderInvScreen();
+      });
+      craftGridEl.appendChild(cell);
+    }
+  }
+
+  // output slot
+  const match = matchGrid(craftCells, 3);
+  craftOutEl.innerHTML = '';
+  craftOutEl.className = 'inv-slot out';
+  if (match) {
+    const needs = gridNeeds();
+    const affordable = [...needs].every(([id, n]) => inventory.count(id) >= n);
+    craftOutEl.appendChild(iconCanvasFor(match.out, 44));
+    if (match.n > 1) {
+      const cnt = document.createElement('span');
+      cnt.className = 'cnt';
+      cnt.textContent = match.n;
+      craftOutEl.appendChild(cnt);
+    }
+    if (affordable) {
+      craftOutEl.title = 'Craft ' + ITEMS[match.out].name;
+      craftOutEl.addEventListener('click', () => { craftFromGrid(); });
+    } else {
+      craftOutEl.classList.add('disabled');
+      craftOutEl.title = 'Not enough materials';
+    }
+    craftHintEl.innerHTML = affordable
+      ? `Click the result to craft <span class="cur">${ITEMS[match.out].name}</span>`
+      : 'Not enough materials for this pattern';
+  } else {
+    craftOutEl.classList.add('empty');
+    craftHintEl.innerHTML = craftCursor != null
+      ? `Placing <span class="cur">${ITEMS[craftCursor].name}</span> — click grid cells (right-click clears)`
+      : craftSize === 2
+        ? 'Pick an item, lay a pattern. Right-click a placed crafting table for the 3×3 grid.'
+        : 'Pick an item from your inventory, then lay out a pattern.';
+  }
+
+  // recipe reference list (click to auto-fill)
   craftList.innerHTML = '';
   for (const r of RECIPES) {
     const ok = inventory.canCraft(r);
@@ -491,7 +605,8 @@ function renderInvScreen() {
     row.appendChild(iconCanvasFor(r.out, 30));
     const name = document.createElement('span');
     name.className = 'c-name';
-    name.textContent = ITEMS[r.out].name + (r.n > 1 ? ` ×${r.n}` : '');
+    name.innerHTML = ITEMS[r.out].name + (r.n > 1 ? ` ×${r.n}` : '') +
+      (r.needsTable ? ' <span class="tag-table">table</span>' : '');
     row.appendChild(name);
     const ins = document.createElement('span');
     ins.className = 'c-in';
@@ -499,14 +614,7 @@ function renderInvScreen() {
       `<span class="${inventory.count(id) >= n ? 'have' : 'miss'}">${n}× ${ITEMS[id].name}</span>`
     ).join(' + ');
     row.appendChild(ins);
-    if (ok) {
-      row.addEventListener('click', () => {
-        if (inventory.craft(r)) {
-          sfx.craft();
-          toast('Crafted ' + ITEMS[r.out].name);
-        }
-      });
-    }
+    row.addEventListener('click', () => autofillRecipe(r));
     craftList.appendChild(row);
   }
 }
@@ -723,12 +831,18 @@ function updateMining(dt) {
 
 function useHeld() {
   if (player.dead || invOpen) return;
+  const hit = currentTarget();
+  // interacting with a crafting table takes precedence over placing/eating
+  if (hit && hit.id === B.CRAFTING_TABLE && hit.t < 5) {
+    placingHeld = false;
+    openInventory(true);
+    return;
+  }
   const id = heldId();
   const it = ITEMS[id];
   if (!it) return;
 
   if (it.kind === 'block') {
-    const hit = currentTarget();
     if (!hit) return;
     const px = hit.x + hit.face[0], py = hit.y + hit.face[1], pz = hit.z + hit.face[2];
     if (py < 0 || py >= HEIGHT) return;
@@ -937,8 +1051,11 @@ window.__game = {
     finishBreak(hit, info);
     return hit;
   },
-  openInventory, closeInventory,
+  openInventory, closeInventory, matchGrid,
   I, ITEMS, RECIPES,
+  setCraftCells: (cells) => { craftCells = cells.slice(0, 9); while (craftCells.length < 9) craftCells.push(null); if (invOpen) renderInvScreen(); },
+  getCraftState: () => ({ craftSize, craftCells: [...craftCells], craftCursor, match: matchGrid(craftCells, 3) }),
+  craftFromGrid,
   state: () => ({ breakingHeld, placingHeld, mining: mining && { ...mining }, invOpen, locked, forceStarted, punchCd }),
   setBreaking: (v) => { breakingHeld = v; },
   step: (dt = 0.05, n = 1) => { for (let i = 0; i < n; i++) frame(dt); },

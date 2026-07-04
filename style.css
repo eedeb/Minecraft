@@ -179,6 +179,22 @@ html, body {
 }
 .inv-slot.empty { opacity: 0.45; cursor: default; }
 .inv-empty-note { font-size: 11px; color: #888; padding: 8px 2px; }
+.inv-item.selected { border-color: #ffd76e; box-shadow: 0 0 0 1px #ffd76e; }
+
+#craftArea { display: flex; align-items: center; gap: 14px; margin: 6px 0 4px; }
+#craftGrid { display: grid; gap: 4px; }
+.craft-cell { cursor: pointer; }
+.craft-cell:hover { border-color: #ffd76e; }
+.craft-arrow { font-size: 30px; color: #bbb; }
+.inv-slot.out { width: 56px; height: 56px; cursor: pointer; opacity: 1; }
+.inv-slot.out.disabled { opacity: 0.4; cursor: default; }
+.inv-slot.out.empty { opacity: 0.3; cursor: default; }
+.tip-line { font-size: 11px; color: #9a9a9a; min-height: 16px; margin-bottom: 6px; }
+.tip-line .cur { color: #ffd76e; }
+.tag-table {
+  font-size: 9px; color: #d8b45a; border: 1px solid #7a6630;
+  padding: 1px 4px; margin-left: 6px; border-radius: 2px; white-space: nowrap;
+}
 
 .craft-row {
   display: flex; align-items: center; gap: 8px;

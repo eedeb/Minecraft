@@ -5,13 +5,14 @@ import { mulberry32, hash2 } from './noise.js';
 export const B = {
   AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, COBBLE: 4, PLANK: 5, LOG: 6, LEAVES: 7,
   SAND: 8, GLASS: 9, WATER: 10, SNOW: 11, BEDROCK: 12, COAL_ORE: 13, IRON_ORE: 14, DIAMOND_ORE: 15,
-  WOOL: 16,
+  WOOL: 16, CRAFTING_TABLE: 17, STONE_BRICK: 18, IRON_BLOCK: 19, DIAMOND_BLOCK: 20,
 };
 
 export const TILE = {
   GRASS_TOP: 0, GRASS_SIDE: 1, DIRT: 2, STONE: 3, COBBLE: 4, PLANK: 5, LOG_SIDE: 6, LOG_TOP: 7,
   LEAVES: 8, SAND: 9, GLASS: 10, WATER: 11, SNOW: 12, SNOW_SIDE: 13, BEDROCK: 14,
   COAL: 15, IRON: 16, DIAMOND: 17, WOOL: 18,
+  CRAFTING_TOP: 19, CRAFTING_SIDE: 20, STONE_BRICK: 21, IRON_BLOCK: 22, DIAMOND_BLOCK: 23,
 };
 
 // def: {name, top, bottom, side (tile ids), solid (collision), opaque (face culling), breakable}
@@ -36,6 +37,10 @@ def(B.COAL_ORE, 'Coal Ore', TILE.COAL, TILE.COAL, TILE.COAL);
 def(B.IRON_ORE, 'Iron Ore', TILE.IRON, TILE.IRON, TILE.IRON);
 def(B.DIAMOND_ORE, 'Diamond Ore', TILE.DIAMOND, TILE.DIAMOND, TILE.DIAMOND);
 def(B.WOOL, 'Wool', TILE.WOOL, TILE.WOOL, TILE.WOOL);
+def(B.CRAFTING_TABLE, 'Crafting Table', TILE.CRAFTING_TOP, TILE.PLANK, TILE.CRAFTING_SIDE);
+def(B.STONE_BRICK, 'Stone Bricks', TILE.STONE_BRICK, TILE.STONE_BRICK, TILE.STONE_BRICK);
+def(B.IRON_BLOCK, 'Iron Block', TILE.IRON_BLOCK, TILE.IRON_BLOCK, TILE.IRON_BLOCK);
+def(B.DIAMOND_BLOCK, 'Diamond Block', TILE.DIAMOND_BLOCK, TILE.DIAMOND_BLOCK, TILE.DIAMOND_BLOCK);
 
 export const isSolid = (id) => !!(BLOCKS[id] && BLOCKS[id].solid);
 export const isOpaque = (id) => !!(BLOCKS[id] && BLOCKS[id].opaque);
@@ -115,6 +120,30 @@ export function buildAtlas() {
     [TILE.WOOL]: (x, y) => {
       if ((x % 4 === 3 && y % 2 === 0) || (y % 4 === 3 && x % 2 === 1)) return [...jitter([205, 205, 205], 6), 255];
       return [...jitter([233, 233, 233], 7), 255];
+    },
+    [TILE.CRAFTING_TOP]: (x, y) => {
+      if (x === 0 || x === 15 || y === 0 || y === 15) return [...jitter([96, 74, 45], 6), 255];
+      if (((x === 5 || x === 10) && y > 1 && y < 14) || ((y === 5 || y === 10) && x > 1 && x < 14))
+        return [...jitter([118, 93, 56], 6), 255];
+      return [...jitter([158, 128, 79], 8), 255];
+    },
+    [TILE.CRAFTING_SIDE]: (x, y) => {
+      if (y < 3) return [...jitter([158, 128, 79], 8), 255];
+      if (x > 2 && x < 13 && y > 4 && y < 12) return [...jitter([139, 105, 63], 7), 255];
+      return [...jitter([121, 92, 53], 7), 255];
+    },
+    [TILE.STONE_BRICK]: (x, y) => {
+      const off = (((y >> 2) % 2) * 4);
+      if (y % 4 === 3 || (x + off) % 8 === 7) return [...jitter([86, 86, 88], 5), 255];
+      return [...jitter([138, 138, 141], 7), 255];
+    },
+    [TILE.IRON_BLOCK]: (x, y) => {
+      if (x === 0 || y === 0 || x === 15 || y === 15) return [...jitter([148, 148, 152], 5), 255];
+      return [...jitter([219, 219, 222], 5), 255];
+    },
+    [TILE.DIAMOND_BLOCK]: (x, y) => {
+      if (x === 0 || y === 0 || x === 15 || y === 15) return [...jitter([52, 150, 145], 5), 255];
+      return [...jitter([95, 216, 209], 6), 255];
     },
   };
   const oreP = (tile) => (x, y) => {

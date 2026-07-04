@@ -7,7 +7,7 @@ A 3D Minecraft clone that runs entirely in the browser. No build step, no depend
 - **Infinite procedural terrain** — seeded Perlin-noise world with rolling plains, forests, deserts, beaches, oceans, and snow-capped mountains
 - **Caves & ores** — winding tunnel systems with coal, iron, and diamond ore
 - **Survival mining** — blocks take time to break (with crack animation); stone and ores require a pickaxe of the right tier to drop anything
-- **Inventory & crafting** — collect drops, assign them to your hotbar, and craft planks, sticks, and full wood/stone/iron/diamond tool sets (press **E**)
+- **Inventory & grid crafting** — collect drops, assign them to your hotbar, and craft in a Minecraft-style 2×2 grid (press **E**); build a **crafting table** for the 3×3 grid and advanced recipes (tools, iron/diamond blocks)
 - **Tools** — pickaxes, axes, and shovels mine their blocks much faster; swords hit harder
 - **Mobs & drops** — pigs, sheep, and cows wander the world and drop food and wool; zombies spawn at night, chase you, and burn at dawn
 - **Food** — eat porkchops, beef, mutton, and apples (right-click) to heal
@@ -17,7 +17,7 @@ A 3D Minecraft clone that runs entirely in the browser. No build step, no depend
 - **World persistence** — your edits, inventory, position, and time of day auto-save to `localStorage`
 - **Juice** — block-break particles, procedural sound effects, ambient-occlusion shading, held-item viewmodel, damage vignette
 
-**Getting started:** punch a tree (hold left-click on the trunk) for logs → press **E** → craft planks, sticks, and a wooden pickaxe → mine stone → stone tools → iron → diamond.
+**Getting started:** punch a tree (hold left-click on the trunk) for logs → press **E** → craft planks (2×2 grid) → craft a crafting table → place it and right-click it → craft sticks and a wooden pickaxe (3×3 grid) → mine stone → stone tools → iron → diamond. The recipe list below the grid auto-fills patterns for you.
 
 ## Controls
 
@@ -28,8 +28,8 @@ A 3D Minecraft clone that runs entirely in the browser. No build step, no depend
 | **Space** | Jump / swim up |
 | **Shift** | Sprint (or descend while flying) |
 | **Hold left click** | Mine block / attack mob |
-| **Right click** | Place block / eat food |
-| **E** | Open inventory & crafting |
+| **Right click** | Place block / eat food / use crafting table |
+| **E** | Open inventory & 2×2 crafting |
 | **Middle click** | Pick targeted block |
 | **1–9 / scroll** | Select hotbar slot |
 | **F** | Toggle flight |
