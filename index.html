@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WebCraft — Minecraft in your browser</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='6' fill='%2378b74a'/><rect y='6' width='16' height='10' fill='%23795c3a'/></svg>">
+  <link rel="stylesheet" href="./style.css">
+  <script type="importmap">
+    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+  </script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud">
+    <div id="crosshair"></div>
+    <div id="hearts"></div>
+    <div id="hotbar"></div>
+    <div id="blockname"></div>
+    <div id="debug"></div>
+    <div id="vignette-damage"></div>
+    <div id="underwater"></div>
+  </div>
+
+  <div id="overlay">
+    <div class="panel">
+      <h1 id="overlayTitle">WEBCRAFT</h1>
+      <p class="sub">a Minecraft clone for the browser</p>
+      <button id="playBtn" class="mc-btn">▶ Play</button>
+      <button id="newWorldBtn" class="mc-btn">✦ New World</button>
+      <div class="controls">
+        <div><b>WASD</b> move &nbsp; <b>Space</b> jump/swim &nbsp; <b>Shift</b> sprint</div>
+        <div><b>Left click</b> mine / punch &nbsp; <b>Right click</b> place</div>
+        <div><b>1–9 / scroll</b> select block &nbsp; <b>Middle click</b> pick block</div>
+        <div><b>F</b> toggle fly &nbsp; <b>F3</b> debug &nbsp; <b>Esc</b> pause</div>
+      </div>
+      <p class="seed" id="seedLabel"></p>
+      <p class="hint">World auto-saves in your browser. Watch out for zombies at night!</p>
+    </div>
+  </div>
+
+  <div id="deathScreen">
+    <div class="panel">
+      <h1>You died!</h1>
+      <button id="respawnBtn" class="mc-btn">Respawn</button>
+    </div>
+  </div>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
