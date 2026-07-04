@@ -57,6 +57,7 @@ const TOOL_IDS = {
       ITEMS[ids[i]] = {
         name: `${label[mn]} ${toolLabel[tool]}`, kind: 'tool', toolType: tool,
         tier: m.tier, mult: m.mult, damage: tool === 'sword' ? m.damage : 3, matKey: mn,
+        stack: 1,
       };
     });
   }
@@ -66,6 +67,11 @@ export const HAND_DAMAGE = 2;
 export function itemDamage(id) {
   const it = ITEMS[id];
   return (it && it.kind === 'tool') ? it.damage : HAND_DAMAGE;
+}
+
+// Max stack size for an item (tools 1, everything else 64).
+export function maxStack(id) {
+  return (ITEMS[id] && ITEMS[id].stack) || 64;
 }
 
 // ---------------------------------------------------------------------------

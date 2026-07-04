@@ -7,7 +7,7 @@ A 3D Minecraft clone that runs entirely in the browser. No build step, no depend
 - **Infinite procedural terrain** — seeded Perlin-noise world with rolling plains, forests, deserts, beaches, oceans, and snow-capped mountains
 - **Caves & ores** — winding tunnel systems with coal, iron, and diamond ore
 - **Survival mining** — blocks take time to break (with crack animation); stone and ores require a pickaxe of the right tier to drop anything
-- **Inventory & grid crafting** — collect drops, assign them to your hotbar, and craft in a Minecraft-style 2×2 grid (press **E**); build a **crafting table** for the 3×3 grid and advanced recipes (tools, iron/diamond blocks)
+- **Minecraft-style inventory** — 36 slots (27 + 9 hotbar) with 64-stack limits, a mouse cursor stack, drag-to-distribute, right-click splitting, shift-click quick-move, double-click collect, tooltips, and Q to drop; craft in the 2×2 grid or build a **crafting table** for the 3×3 grid and advanced recipes
 - **Tools** — pickaxes, axes, and shovels mine their blocks much faster; swords hit harder
 - **Mobs & drops** — pigs, sheep, and cows wander the world and drop food and wool; zombies spawn at night, chase you, and burn at dawn
 - **Food** — eat porkchops, beef, mutton, and apples (right-click) to heal
@@ -31,7 +31,10 @@ A 3D Minecraft clone that runs entirely in the browser. No build step, no depend
 | **Hold left click** | Mine block / attack mob |
 | **Right click** | Place block / eat food / use crafting table |
 | **E** | Open inventory & 2×2 crafting |
+| **Q / Ctrl+Q** | Drop one / whole stack (held or hovered item) |
 | **Middle click** | Pick targeted block |
+
+In the inventory (Minecraft-style): **left-click** picks up / places / swaps stacks, **right-click** picks up half / places one, **drag** distributes a stack across slots (right-drag places one per slot), **shift-click** quick-moves between hotbar and inventory, **double-click** collects all matching items, **hover + 1–9** swaps with a hotbar slot, and clicking outside the panel throws the held stack. The game pauses while the inventory is open.
 | **1–9 / scroll** | Select hotbar slot |
 | **F** | Toggle flight |
 | **F3** | Debug overlay |

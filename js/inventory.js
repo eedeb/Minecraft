@@ -1,74 +1,233 @@
-// Player inventory: global item counts + 9 hotbar slots that point at item ids.
+// Minecraft Java Edition-style slot inventory.
+// 36 slots (0-8 hotbar, 9-35 main), a 3x3 crafting grid holding real item
+// stacks (2x2 mode uses cells 0,1,3,4), and a cursor stack held on the mouse.
+// Each slot is null or {id, n}.
+
+import { maxStack } from './items.js';
+
+const enc = (s) => (s ? [s.id, s.n] : null);
+const dec = (v) => (v && v[1] > 0 ? { id: +v[0], n: +v[1] } : null);
 
 export class Inventory {
   constructor() {
-    this.counts = new Map(); // itemId -> count
-    this.hotbar = new Array(9).fill(null);
+    this.slots = new Array(36).fill(null); // 0-8 = hotbar, 9-35 = main
+    this.craft = new Array(9).fill(null);  // 3x3 crafting grid
+    this.cursor = null;                    // stack "picked up" by the mouse
     this.onChange = null;
   }
 
-  _changed() { if (this.onChange) this.onChange(); }
+  _c() { if (this.onChange) this.onChange(); }
 
-  count(id) { return this.counts.get(id) || 0; }
+  get(area, idx) { return (area === 'craft' ? this.craft : this.slots)[idx] || null; }
+  set(area, idx, s) { (area === 'craft' ? this.craft : this.slots)[idx] = (s && s.n > 0) ? s : null; }
 
-  add(id, n = 1) {
-    if (n <= 0) return;
-    this.counts.set(id, this.count(id) + n);
-    // auto-assign new item types to a free hotbar slot
-    if (!this.hotbar.includes(id)) {
-      const free = this.hotbar.indexOf(null);
-      if (free !== -1) this.hotbar[free] = id;
+  // total in main slots (not craft grid / cursor)
+  count(id) {
+    let n = 0;
+    for (const s of this.slots) if (s && s.id === id) n += s.n;
+    return n;
+  }
+
+  // Item pickup: fill partial stacks first, then empty slots (hotbar first).
+  // Returns the leftover count that did not fit (0 = all stored).
+  add(id, n) {
+    let left = n;
+    const lim = maxStack(id);
+    for (const s of this.slots) {
+      if (left <= 0) break;
+      if (s && s.id === id && s.n < lim) {
+        const t = Math.min(left, lim - s.n);
+        s.n += t; left -= t;
+      }
     }
-    this._changed();
-  }
-
-  remove(id, n = 1) {
-    const c = this.count(id) - n;
-    if (c > 0) {
-      this.counts.set(id, c);
-    } else {
-      this.counts.delete(id);
-      this.hotbar = this.hotbar.map(s => (s === id ? null : s));
+    for (let i = 0; i < 36 && left > 0; i++) {
+      if (!this.slots[i]) {
+        const t = Math.min(left, lim);
+        this.slots[i] = { id, n: t };
+        left -= t;
+      }
     }
-    this._changed();
+    if (left !== n) this._c();
+    return left;
   }
 
-  assignToHotbar(id, slot = -1) {
-    if (!this.counts.has(id)) return;
-    const existing = this.hotbar.indexOf(id);
-    if (existing !== -1) this.hotbar[existing] = null;
-    if (slot === -1) slot = this.hotbar.indexOf(null);
-    if (slot === -1) slot = existing !== -1 ? existing : 8;
-    this.hotbar[slot] = id;
-    this._changed();
-  }
-
-  clearSlot(slot) {
-    this.hotbar[slot] = null;
-    this._changed();
-  }
-
-  canCraft(recipe) {
-    return recipe.in.every(([id, n]) => this.count(id) >= n);
-  }
-
-  craft(recipe) {
-    if (!this.canCraft(recipe)) return false;
-    for (const [id, n] of recipe.in) this.remove(id, n);
-    this.add(recipe.out, recipe.n);
+  // Remove n of id from main slots; all-or-nothing.
+  consume(id, n) {
+    if (this.count(id) < n) return false;
+    let left = n;
+    for (let i = 0; i < 36 && left > 0; i++) {
+      const s = this.slots[i];
+      if (s && s.id === id) {
+        const t = Math.min(left, s.n);
+        s.n -= t; left -= t;
+        if (!s.n) this.slots[i] = null;
+      }
+    }
+    this._c();
     return true;
   }
 
+  // Take up to n items out of a slot; returns {id, n} or null.
+  takeFrom(area, idx, n) {
+    const s = this.get(area, idx);
+    if (!s) return null;
+    const t = Math.min(n, s.n);
+    s.n -= t;
+    const id = s.id;
+    if (!s.n) this.set(area, idx, null);
+    this._c();
+    return { id, n: t };
+  }
+
+  // --- Minecraft mouse semantics -------------------------------------------
+
+  // Left click: pick up stack / place stack / merge / swap.
+  leftClick(area, idx) {
+    const s = this.get(area, idx);
+    if (!this.cursor) {
+      if (s) { this.cursor = s; this.set(area, idx, null); }
+    } else if (!s) {
+      this.set(area, idx, this.cursor);
+      this.cursor = null;
+    } else if (s.id === this.cursor.id) {
+      const lim = maxStack(s.id);
+      const t = Math.min(this.cursor.n, lim - s.n);
+      s.n += t; this.cursor.n -= t;
+      if (!this.cursor.n) this.cursor = null;
+    } else {
+      const tmp = this.cursor;
+      this.cursor = s;
+      this.set(area, idx, tmp);
+    }
+    this._c();
+  }
+
+  // Right click: pick up half / place one.
+  rightClick(area, idx) {
+    const s = this.get(area, idx);
+    if (!this.cursor) {
+      if (s) {
+        const t = Math.ceil(s.n / 2);
+        this.cursor = { id: s.id, n: t };
+        s.n -= t;
+        if (!s.n) this.set(area, idx, null);
+      }
+    } else if (!s) {
+      this.set(area, idx, { id: this.cursor.id, n: 1 });
+      this.cursor.n--;
+      if (!this.cursor.n) this.cursor = null;
+    } else if (s.id === this.cursor.id && s.n < maxStack(s.id)) {
+      s.n++;
+      this.cursor.n--;
+      if (!this.cursor.n) this.cursor = null;
+    }
+    this._c();
+  }
+
+  // Double click: pull every matching stack into the cursor (up to the limit).
+  collectAll() {
+    if (!this.cursor) return;
+    const id = this.cursor.id;
+    const lim = maxStack(id);
+    const pull = (arr) => {
+      for (let i = 0; i < arr.length; i++) {
+        const s = arr[i];
+        if (s && s.id === id && this.cursor.n < lim) {
+          const t = Math.min(s.n, lim - this.cursor.n);
+          s.n -= t; this.cursor.n += t;
+          if (!s.n) arr[i] = null;
+        }
+      }
+    };
+    pull(this.slots);
+    pull(this.craft);
+    this._c();
+  }
+
+  // Hover + number key: swap a slot with a hotbar slot.
+  swapWithHotbar(area, idx, hb) {
+    if (area === 'inv' && idx === hb) return;
+    const a = this.get(area, idx);
+    this.set(area, idx, this.slots[hb]);
+    this.slots[hb] = a;
+    this._c();
+  }
+
+  // Shift-click: craft grid -> inventory; hotbar <-> main.
+  quickMove(area, idx) {
+    const s = this.get(area, idx);
+    if (!s) return;
+    let targets;
+    if (area === 'craft') targets = [...Array(36).keys()];
+    else if (idx < 9) targets = Array.from({ length: 27 }, (_, i) => i + 9);
+    else targets = [...Array(9).keys()];
+    const lim = maxStack(s.id);
+    for (const i of targets) {
+      const t = this.slots[i];
+      if (t && t.id === s.id && t.n < lim) {
+        const mv = Math.min(s.n, lim - t.n);
+        t.n += mv; s.n -= mv;
+        if (!s.n) { this.set(area, idx, null); this._c(); return; }
+      }
+    }
+    for (const i of targets) {
+      if (!this.slots[i]) {
+        this.slots[i] = { id: s.id, n: s.n };
+        this.set(area, idx, null);
+        this._c();
+        return;
+      }
+    }
+    this._c(); // partial merge only
+  }
+
+  // Return crafting grid + cursor to the inventory (on close).
+  // Returns stacks that did not fit, for dropping into the world.
+  returnAll() {
+    const leftovers = [];
+    for (let i = 0; i < 9; i++) {
+      const s = this.craft[i];
+      if (s) {
+        this.craft[i] = null;
+        const left = this.add(s.id, s.n);
+        if (left > 0) leftovers.push({ id: s.id, n: left });
+      }
+    }
+    if (this.cursor) {
+      const c = this.cursor;
+      this.cursor = null;
+      const left = this.add(c.id, c.n);
+      if (left > 0) leftovers.push({ id: c.id, n: left });
+    }
+    this._c();
+    return leftovers;
+  }
+
   serialize() {
-    return { counts: [...this.counts], hotbar: this.hotbar };
+    return { v: 2, slots: this.slots.map(enc), craft: this.craft.map(enc), cursor: enc(this.cursor) };
   }
 
   static from(data) {
     const inv = new Inventory();
-    if (data) {
-      for (const [id, n] of data.counts || []) inv.counts.set(+id, n);
-      if (Array.isArray(data.hotbar)) inv.hotbar = data.hotbar.map(s => (s == null ? null : +s)).slice(0, 9);
-      while (inv.hotbar.length < 9) inv.hotbar.push(null);
+    if (!data) return inv;
+    if (data.v === 2) {
+      (data.slots || []).slice(0, 36).forEach((v, i) => { inv.slots[i] = dec(v); });
+      (data.craft || []).slice(0, 9).forEach((v, i) => { inv.craft[i] = dec(v); });
+      inv.cursor = dec(data.cursor);
+      return inv;
+    }
+    // migrate v1 format ({counts: [[id,n]], hotbar: [id|null]})
+    if (data.counts) {
+      const counts = new Map(data.counts.map(([id, n]) => [+id, n]));
+      (data.hotbar || []).slice(0, 9).forEach((id, i) => {
+        if (id == null) return;
+        const have = counts.get(+id) || 0;
+        if (have <= 0) return;
+        const t = Math.min(have, maxStack(+id));
+        inv.slots[i] = { id: +id, n: t };
+        counts.set(+id, have - t);
+      });
+      for (const [id, n] of counts) if (n > 0) inv.add(id, n);
     }
     return inv;
   }

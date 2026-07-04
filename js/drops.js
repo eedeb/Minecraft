@@ -17,19 +17,24 @@ export class DropManager {
     this.list = [];
   }
 
-  spawn(id, n, x, y, z) {
-    for (let i = 0; i < n; i++) {
+  // opts.stack: spawn one entity holding all n items (Q-drops)
+  // opts.throwDir: initial velocity direction (thrown from the player)
+  spawn(id, n, x, y, z, opts = {}) {
+    const entities = opts.stack ? [n] : new Array(n).fill(1);
+    for (const count of entities) {
       if (this.list.length >= MAX_DROPS) {
         const old = this.list.shift();
         this.scene.remove(old.mesh);
       }
       const mesh = this._makeMesh(id);
       const e = {
-        id,
+        id, n: count,
         pos: { x: x + (Math.random() - 0.5) * 0.3, y, z: z + (Math.random() - 0.5) * 0.3 },
-        vel: { x: (Math.random() - 0.5) * 2.5, y: 2.5 + Math.random() * 1.5, z: (Math.random() - 0.5) * 2.5 },
+        vel: opts.throwDir
+          ? { x: opts.throwDir.x * 4, y: opts.throwDir.y * 4 + 2, z: opts.throwDir.z * 4 }
+          : { x: (Math.random() - 0.5) * 2.5, y: 2.5 + Math.random() * 1.5, z: (Math.random() - 0.5) * 2.5 },
         half: 0.12, height: 0.24,
-        age: 0, spin: Math.random() * Math.PI * 2,
+        age: 0, retry: opts.throwDir ? 1.2 : 0, spin: Math.random() * Math.PI * 2,
         mesh,
       };
       mesh.position.set(e.pos.x, e.pos.y, e.pos.z);
@@ -62,16 +67,18 @@ export class DropManager {
       if (!this.world.hasDataAt(e.pos.x, e.pos.z)) continue;
 
       // magnet toward the player, pickup when close
+      if (e.retry > 0) e.retry -= dt;
       const dx = p.pos.x - e.pos.x, dy = (p.pos.y + 0.4) - e.pos.y, dz = p.pos.z - e.pos.z;
       const dist = Math.hypot(dx, dy, dz);
-      if (e.age > 0.4 && !p.dead) {
+      if (e.age > 0.4 && e.retry <= 0 && !p.dead) {
         if (dist < 1.1) {
-          ctx.inventory.add(e.id, 1);
-          if (ctx.onPickup) ctx.onPickup(e.id);
-          this._remove(i);
-          continue;
-        }
-        if (dist < 2.6) {
+          // fill partial stacks first; if the inventory is full the item stays
+          const leftover = ctx.inventory.add(e.id, e.n);
+          if (leftover < e.n && ctx.onPickup) ctx.onPickup(e.id);
+          if (leftover === 0) { this._remove(i); continue; }
+          e.n = leftover;
+          e.retry = 1.5;
+        } else if (dist < 2.6) {
           const pull = (26 + 18 * Math.max(0, dy / dist)) * dt / Math.max(dist, 0.4);
           e.vel.x += dx * pull; e.vel.y += dy * pull; e.vel.z += dz * pull;
         }

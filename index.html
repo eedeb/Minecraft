@@ -55,24 +55,25 @@
   <div id="invScreen">
     <div class="inv-panel">
       <div class="inv-col">
-        <h2>Inventory</h2>
-        <div id="invGrid"></div>
-        <h2>Hotbar <span class="tip">click an item above to assign · click a slot to clear</span></h2>
-        <div id="invHotbar"></div>
-      </div>
-      <div class="inv-col">
         <h2 id="craftTitle">Crafting</h2>
         <div id="craftArea">
           <div id="craftGrid"></div>
           <div class="craft-arrow">→</div>
           <div id="craftOut" class="inv-slot out empty"></div>
         </div>
-        <div id="craftHint" class="tip-line"></div>
+        <h2>Inventory</h2>
+        <div id="invMain" class="slot-grid"></div>
+        <div id="invHotbarRow" class="slot-grid hotbar-row"></div>
+        <div class="tip-line" id="invTip">Drag to move · right-click splits · shift-click quick-moves · hover + 1–9 or Q</div>
+      </div>
+      <div class="inv-col recipes">
         <h2>Recipes <span class="tip">click one to fill the grid</span></h2>
         <div id="craftList"></div>
       </div>
       <button id="invClose" class="mc-btn small">Close (E)</button>
     </div>
+    <div id="cursorStack"></div>
+    <div id="invTooltip"></div>
   </div>
 
   <script type="module" src="./js/main.js"></script>
