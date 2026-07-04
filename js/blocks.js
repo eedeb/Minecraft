@@ -5,12 +5,13 @@ import { mulberry32, hash2 } from './noise.js';
 export const B = {
   AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, COBBLE: 4, PLANK: 5, LOG: 6, LEAVES: 7,
   SAND: 8, GLASS: 9, WATER: 10, SNOW: 11, BEDROCK: 12, COAL_ORE: 13, IRON_ORE: 14, DIAMOND_ORE: 15,
+  WOOL: 16,
 };
 
 export const TILE = {
   GRASS_TOP: 0, GRASS_SIDE: 1, DIRT: 2, STONE: 3, COBBLE: 4, PLANK: 5, LOG_SIDE: 6, LOG_TOP: 7,
   LEAVES: 8, SAND: 9, GLASS: 10, WATER: 11, SNOW: 12, SNOW_SIDE: 13, BEDROCK: 14,
-  COAL: 15, IRON: 16, DIAMOND: 17,
+  COAL: 15, IRON: 16, DIAMOND: 17, WOOL: 18,
 };
 
 // def: {name, top, bottom, side (tile ids), solid (collision), opaque (face culling), breakable}
@@ -34,12 +35,10 @@ def(B.BEDROCK, 'Bedrock', TILE.BEDROCK, TILE.BEDROCK, TILE.BEDROCK, { breakable:
 def(B.COAL_ORE, 'Coal Ore', TILE.COAL, TILE.COAL, TILE.COAL);
 def(B.IRON_ORE, 'Iron Ore', TILE.IRON, TILE.IRON, TILE.IRON);
 def(B.DIAMOND_ORE, 'Diamond Ore', TILE.DIAMOND, TILE.DIAMOND, TILE.DIAMOND);
+def(B.WOOL, 'Wool', TILE.WOOL, TILE.WOOL, TILE.WOOL);
 
 export const isSolid = (id) => !!(BLOCKS[id] && BLOCKS[id].solid);
 export const isOpaque = (id) => !!(BLOCKS[id] && BLOCKS[id].opaque);
-
-// Hotbar palette (creative mode: infinite blocks)
-export const PALETTE = [B.GRASS, B.DIRT, B.STONE, B.COBBLE, B.PLANK, B.LOG, B.LEAVES, B.SAND, B.GLASS];
 
 // ---------------------------------------------------------------------------
 // Texture atlas: 8x4 grid of 16px tiles -> 128x64 canvas.
@@ -113,6 +112,10 @@ export function buildAtlas() {
       return [...jitter([134, 96, 67], 12), 255];
     },
     [TILE.BEDROCK]: () => [...jitter([62, 62, 64], 26), 255],
+    [TILE.WOOL]: (x, y) => {
+      if ((x % 4 === 3 && y % 2 === 0) || (y % 4 === 3 && x % 2 === 1)) return [...jitter([205, 205, 205], 6), 255];
+      return [...jitter([233, 233, 233], 7), 255];
+    },
   };
   const oreP = (tile) => (x, y) => {
     const { color, spots } = ORE_SPOTS[tile];

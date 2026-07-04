@@ -31,4 +31,8 @@ export const sfx = {
   pop: () => tone('square', 380, 900, 0.09, 0.12),
   hit: () => tone('square', 120, 60, 0.08, 0.12),
   splash: () => tone('sawtooth', 500, 100, 0.25, 0.06),
+  pickup: () => tone('square', 700 + Math.random() * 200, 1100, 0.08, 0.08),
+  eat: () => { tone('square', 90, 60, 0.09, 0.1); setTimeout(() => tone('square', 80, 55, 0.09, 0.1), 120); },
+  craft: () => tone('square', 300, 500, 0.1, 0.1),
+  mine: () => tone('square', 140 + Math.random() * 50, 100, 0.04, 0.05),
 };

@@ -31,8 +31,8 @@
       <button id="newWorldBtn" class="mc-btn">✦ New World</button>
       <div class="controls">
         <div><b>WASD</b> move &nbsp; <b>Space</b> jump/swim &nbsp; <b>Shift</b> sprint</div>
-        <div><b>Left click</b> mine / punch &nbsp; <b>Right click</b> place</div>
-        <div><b>1–9 / scroll</b> select block &nbsp; <b>Middle click</b> pick block</div>
+        <div><b>Hold left click</b> mine / attack &nbsp; <b>Right click</b> place / eat</div>
+        <div><b>E</b> inventory &amp; crafting &nbsp; <b>1–9 / scroll</b> hotbar</div>
         <div><b>F</b> toggle fly &nbsp; <b>F3</b> debug &nbsp; <b>Esc</b> pause</div>
       </div>
       <p class="seed" id="seedLabel"></p>
@@ -44,6 +44,22 @@
     <div class="panel">
       <h1>You died!</h1>
       <button id="respawnBtn" class="mc-btn">Respawn</button>
+    </div>
+  </div>
+
+  <div id="invScreen">
+    <div class="inv-panel">
+      <div class="inv-col">
+        <h2>Inventory</h2>
+        <div id="invGrid"></div>
+        <h2>Hotbar <span class="tip">click an item above to assign · click a slot to clear</span></h2>
+        <div id="invHotbar"></div>
+      </div>
+      <div class="inv-col">
+        <h2>Crafting</h2>
+        <div id="craftList"></div>
+      </div>
+      <button id="invClose" class="mc-btn small">Close (E)</button>
     </div>
   </div>
 

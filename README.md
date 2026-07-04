@@ -6,13 +6,18 @@ A 3D Minecraft clone that runs entirely in the browser. No build step, no depend
 
 - **Infinite procedural terrain** — seeded Perlin-noise world with rolling plains, forests, deserts, beaches, oceans, and snow-capped mountains
 - **Caves & ores** — winding tunnel systems with coal, iron, and diamond ore
-- **Mining & building** — break any block, place 9 block types from the hotbar (creative-style)
-- **Mobs** — pigs, sheep, and cows wander the world; zombies spawn at night, chase you, and burn at dawn
+- **Survival mining** — blocks take time to break (with crack animation); stone and ores require a pickaxe of the right tier to drop anything
+- **Inventory & crafting** — collect drops, assign them to your hotbar, and craft planks, sticks, and full wood/stone/iron/diamond tool sets (press **E**)
+- **Tools** — pickaxes, axes, and shovels mine their blocks much faster; swords hit harder
+- **Mobs & drops** — pigs, sheep, and cows wander the world and drop food and wool; zombies spawn at night, chase you, and burn at dawn
+- **Food** — eat porkchops, beef, mutton, and apples (right-click) to heal
 - **Day/night cycle** — moving sun and moon, stars, sunsets, and fog that matches the sky
-- **Survival elements** — health, fall damage, zombie attacks with knockback, drowning-free swimming, death & respawn
+- **Survival elements** — health, fall damage, zombie attacks with knockback, death & respawn
 - **Physics** — gravity, jumping, swimming, sprinting, and creative flight
-- **World persistence** — your edits, position, and time of day auto-save to `localStorage`
-- **Juice** — block-break particles, procedural sound effects, ambient-occlusion shading, held-block viewmodel, damage vignette
+- **World persistence** — your edits, inventory, position, and time of day auto-save to `localStorage`
+- **Juice** — block-break particles, procedural sound effects, ambient-occlusion shading, held-item viewmodel, damage vignette
+
+**Getting started:** punch a tree (hold left-click on the trunk) for logs → press **E** → craft planks, sticks, and a wooden pickaxe → mine stone → stone tools → iron → diamond.
 
 ## Controls
 
@@ -22,8 +27,9 @@ A 3D Minecraft clone that runs entirely in the browser. No build step, no depend
 | **Mouse** | Look |
 | **Space** | Jump / swim up |
 | **Shift** | Sprint (or descend while flying) |
-| **Left click** | Mine block / punch mob |
-| **Right click** | Place block |
+| **Hold left click** | Mine block / attack mob |
+| **Right click** | Place block / eat food |
+| **E** | Open inventory & crafting |
 | **Middle click** | Pick targeted block |
 | **1–9 / scroll** | Select hotbar slot |
 | **F** | Toggle flight |
@@ -60,8 +66,11 @@ Then open <http://localhost:8123>.
 | `js/world.js` | Chunk storage, terrain/biome/cave/tree generation, chunk meshing with baked ambient occlusion |
 | `js/physics.js` | Swept AABB vs. voxel collision shared by player and mobs |
 | `js/player.js` | First-person controller (walk/sprint/jump/swim/fly, health, fall damage) |
-| `js/mobs.js` | Mob models, wander/chase AI, spawning |
+| `js/mobs.js` | Mob models, wander/chase AI, spawning, drop tables |
+| `js/items.js` | Item/tool definitions, mining rules (hardness, tool tiers, drops), recipes, pixel-art icons |
+| `js/inventory.js` | Item counts + hotbar slot assignment |
+| `js/drops.js` | Dropped-item entities with magnet pickup |
 | `js/sound.js` | Procedural WebAudio sound effects |
-| `js/main.js` | Renderer, input, mining/building raycast, HUD, day/night cycle, save/load |
+| `js/main.js` | Renderer, input, timed mining, inventory/crafting UI, HUD, day/night cycle, save/load |
 
 The world is generated in 16×16×80 chunks. Each chunk is meshed into a single geometry containing only the exposed block faces, with per-vertex ambient occlusion, and re-meshed on edit. Block edits are stored as per-chunk diffs so worlds regenerate deterministically from the seed plus your changes.

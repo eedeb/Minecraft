@@ -112,8 +112,8 @@ export class Player {
     // fell out of the world
     if (this.pos.y < -12) this.damage(100, time);
 
-    // slow regen out of combat
-    if (this.hp < this.maxHp && time - this.lastDamage > 8 && time - this.lastRegen > 2) {
+    // slow regen out of combat (eat food to heal faster)
+    if (this.hp < this.maxHp && time - this.lastDamage > 10 && time - this.lastRegen > 4) {
       this.hp = Math.min(this.maxHp, this.hp + 1);
       this.lastRegen = time;
     }

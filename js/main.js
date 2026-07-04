@@ -1,13 +1,18 @@
 // WebCraft — a Minecraft clone for the browser.
-// Entry point: rendering, input, interaction, HUD, day/night, save/load.
+// Entry point: rendering, input, mining/building, inventory & crafting,
+// HUD, day/night, save/load.
 
 import * as THREE from 'three';
-import { B, BLOCKS, PALETTE, buildAtlas, tileUV, computeAvgColors, isSolid } from './blocks.js';
+import { B, BLOCKS, buildAtlas, tileUV, computeAvgColors } from './blocks.js';
 import { World, CHUNK, HEIGHT, SEA } from './world.js';
 import { Player } from './player.js';
 import { MobManager } from './mobs.js';
 import { blockOverlapsEntity } from './physics.js';
 import { initAudio, sfx } from './sound.js';
+import { mulberry32 } from './noise.js';
+import { I, ITEMS, breakInfo, RECIPES, itemIcon, initItemIcons, itemDamage, TIER_NAMES } from './items.js';
+import { Inventory } from './inventory.js';
+import { DropManager } from './drops.js';
 
 const SAVE_KEY = 'webcraft_save_v1';
 const DAY_LEN = 300; // seconds per full day/night cycle
@@ -80,6 +85,7 @@ scene.add(stars);
 // Materials from generated atlas
 
 const atlasCanvas = buildAtlas();
+initItemIcons(atlasCanvas);
 const atlasTex = new THREE.CanvasTexture(atlasCanvas);
 atlasTex.magFilter = THREE.NearestFilter;
 atlasTex.minFilter = THREE.NearestFilter;
@@ -92,8 +98,21 @@ const materials = {
 };
 const avgColors = computeAvgColors(atlasCanvas);
 
+const itemTexCache = new Map();
+function itemTexture(id) {
+  if (!itemTexCache.has(id)) {
+    const tex = new THREE.CanvasTexture(itemIcon(id));
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    tex.generateMipmaps = false;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    itemTexCache.set(id, tex);
+  }
+  return itemTexCache.get(id);
+}
+
 // ---------------------------------------------------------------------------
-// World / player / mobs
+// World / player / inventory
 
 const world = new World(seed, scene, materials, renderDist);
 if (saved && saved.edits) {
@@ -108,8 +127,11 @@ if (saved && saved.player) {
   player.pitch = saved.player.pitch || 0;
   player.hp = saved.player.hp ?? 20;
 }
-let timeOfDay = saved?.timeOfDay ?? 0.28; // start just before noon
+let timeOfDay = saved?.timeOfDay ?? 0.28;
 let selected = saved?.player?.sel ?? 0;
+
+const inventory = Inventory.from(saved?.inventory);
+const isNewPlayer = !saved?.inventory;
 
 // build ground under the player synchronously so we don't fall through
 {
@@ -175,14 +197,7 @@ class Particles {
 const particles = new Particles(scene);
 
 // ---------------------------------------------------------------------------
-// Block highlight + held block viewmodel
-
-const highlight = new THREE.LineSegments(
-  new THREE.EdgesGeometry(new THREE.BoxGeometry(1.002, 1.002, 1.002)),
-  new THREE.LineBasicMaterial({ color: 0x111111 })
-);
-highlight.visible = false;
-scene.add(highlight);
+// Block geometry helper (held viewmodel + dropped block items)
 
 function makeBlockGeometry(id) {
   const blk = BLOCKS[id];
@@ -216,18 +231,95 @@ function makeBlockGeometry(id) {
   return g;
 }
 
+const blockGeoCache = new Map();
+function cachedBlockGeometry(id) {
+  if (!blockGeoCache.has(id)) blockGeoCache.set(id, makeBlockGeometry(id));
+  return blockGeoCache.get(id);
+}
+
+const drops = new DropManager(scene, world, {
+  blockGeometry: cachedBlockGeometry,
+  blockMaterial: materials.opaque,
+  itemTexture,
+});
+
+// ---------------------------------------------------------------------------
+// Block highlight + crack overlay + held viewmodel
+
+const highlight = new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.BoxGeometry(1.002, 1.002, 1.002)),
+  new THREE.LineBasicMaterial({ color: 0x111111 })
+);
+highlight.visible = false;
+scene.add(highlight);
+
+function buildCrackTextures() {
+  const texs = [];
+  const rand = mulberry32(4242);
+  for (let s = 0; s < 5; s++) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 16;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = 'rgba(15,15,15,0.85)';
+    const cracks = (s + 1) * 3;
+    for (let i = 0; i < cracks; i++) {
+      let x = (rand() * 16) | 0, y = (rand() * 16) | 0;
+      const len = 3 + ((rand() * 5) | 0);
+      for (let j = 0; j < len; j++) {
+        ctx.fillRect(x, y, 1, 1);
+        x = Math.max(0, Math.min(15, x + ((rand() * 3) | 0) - 1));
+        y = Math.max(0, Math.min(15, y + ((rand() * 3) | 0) - 1));
+      }
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    tex.generateMipmaps = false;
+    texs.push(tex);
+  }
+  return texs;
+}
+const crackTextures = buildCrackTextures();
+const crackMat = new THREE.MeshBasicMaterial({
+  map: crackTextures[0], transparent: true, depthWrite: false,
+  polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+});
+const crackMesh = new THREE.Mesh(new THREE.BoxGeometry(1.003, 1.003, 1.003), crackMat);
+crackMesh.visible = false;
+scene.add(crackMesh);
+
 const heldGroup = new THREE.Group();
 camera.add(heldGroup);
 scene.add(camera);
 let heldMesh = null;
 let swingT = 10;
-function updateHeldBlock() {
-  if (heldMesh) { heldGroup.remove(heldMesh); heldMesh.geometry.dispose(); }
-  heldMesh = new THREE.Mesh(makeBlockGeometry(PALETTE[selected]), materials.opaque);
-  heldMesh.scale.setScalar(0.22);
+
+function heldId() { return inventory.hotbar[selected]; }
+
+function updateHeldItem() {
+  if (heldMesh) {
+    heldGroup.remove(heldMesh);
+    if (heldMesh.userData.ownGeo) heldMesh.geometry.dispose();
+    heldMesh = null;
+  }
+  const id = heldId();
+  const it = ITEMS[id];
+  if (!it) return;
+  if (it.kind === 'block') {
+    heldMesh = new THREE.Mesh(cachedBlockGeometry(id), materials.opaque);
+    heldMesh.scale.setScalar(0.22);
+    heldGroup.position.set(0.55, -0.48, -0.85);
+    heldGroup.rotation.set(0.12, Math.PI / 5, 0);
+  } else {
+    heldMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.5, 0.5),
+      new THREE.MeshBasicMaterial({ map: itemTexture(id), transparent: true, alphaTest: 0.1, side: THREE.DoubleSide })
+    );
+    heldMesh.userData.ownGeo = true;
+    heldGroup.position.set(0.5, -0.45, -0.8);
+    heldGroup.rotation.set(0.1, -0.35, 0.25);
+  }
   heldGroup.add(heldMesh);
-  heldGroup.position.set(0.55, -0.48, -0.85);
-  heldGroup.rotation.set(0.12, Math.PI / 5, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -242,41 +334,57 @@ const debugEl = document.getElementById('debug');
 const blockNameEl = document.getElementById('blockname');
 const damageEl = document.getElementById('vignette-damage');
 const underwaterEl = document.getElementById('underwater');
+const invScreen = document.getElementById('invScreen');
+const invGrid = document.getElementById('invGrid');
+const invHotbar = document.getElementById('invHotbar');
+const craftList = document.getElementById('craftList');
 document.getElementById('seedLabel').textContent = 'seed: ' + (seed >>> 0);
 
 let blockNameT = 0;
-function showBlockName() {
-  blockNameEl.textContent = BLOCKS[PALETTE[selected]].name;
+function toast(text, secs = 1.6) {
+  blockNameEl.textContent = text;
   blockNameEl.style.opacity = 1;
-  blockNameT = 1.6;
+  blockNameT = secs;
 }
 
-const slotCanvases = [];
-function buildHotbar() {
+function iconCanvasFor(id, size = 36) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(itemIcon(id), 0, 0, 16, 16, 0, 0, size, size);
+  return c;
+}
+
+function renderHotbar() {
   hotbarEl.innerHTML = '';
-  PALETTE.forEach((id, i) => {
+  for (let i = 0; i < 9; i++) {
     const slot = document.createElement('div');
     slot.className = 'slot' + (i === selected ? ' sel' : '');
-    const c = document.createElement('canvas');
-    c.width = c.height = 40;
-    const ctx = c.getContext('2d');
-    ctx.imageSmoothingEnabled = false;
-    const tile = BLOCKS[id].side;
-    const col = tile % 8, row = (tile / 8) | 0;
-    ctx.drawImage(atlasCanvas, col * 16, row * 16, 16, 16, 2, 2, 36, 36);
-    slot.appendChild(c);
+    const id = inventory.hotbar[i];
+    if (id != null) {
+      slot.appendChild(iconCanvasFor(id, 36));
+      const n = inventory.count(id);
+      if (!(ITEMS[id].kind === 'tool' && n === 1)) {
+        const cnt = document.createElement('span');
+        cnt.className = 'cnt';
+        cnt.textContent = n;
+        slot.appendChild(cnt);
+      }
+    }
     const num = document.createElement('span');
     num.textContent = i + 1;
     slot.appendChild(num);
     hotbarEl.appendChild(slot);
-    slotCanvases.push(slot);
-  });
+  }
 }
+
 function setSelected(i) {
-  selected = ((i % PALETTE.length) + PALETTE.length) % PALETTE.length;
+  selected = ((i % 9) + 9) % 9;
   document.querySelectorAll('#hotbar .slot').forEach((s, j) => s.classList.toggle('sel', j === selected));
-  updateHeldBlock();
-  showBlockName();
+  updateHeldItem();
+  const id = heldId();
+  if (id != null) toast(ITEMS[id].name);
 }
 
 let lastHp = -1;
@@ -302,6 +410,7 @@ player.onDamage = () => {
   sfx.hurt();
 };
 player.onDeath = () => {
+  closeInventory(false);
   document.exitPointerLock();
   deathScreen.classList.add('show');
 };
@@ -313,14 +422,111 @@ document.getElementById('respawnBtn').addEventListener('click', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Inventory & crafting screen
+
+let invOpen = false;
+
+function openInventory() {
+  if (player.dead) return;
+  invOpen = true;
+  invScreen.classList.add('show');
+  renderInvScreen();
+  if (locked) document.exitPointerLock();
+}
+
+function closeInventory(relock = true) {
+  if (!invOpen) return;
+  invOpen = false;
+  invScreen.classList.remove('show');
+  if (relock && started && !player.dead) canvas.requestPointerLock();
+}
+
+document.getElementById('invClose').addEventListener('click', () => closeInventory());
+
+function renderInvScreen() {
+  // items owned
+  invGrid.innerHTML = '';
+  const entries = [...inventory.counts].sort((a, b) => a[0] - b[0]);
+  if (entries.length === 0) {
+    const note = document.createElement('div');
+    note.className = 'inv-empty-note';
+    note.textContent = 'Nothing yet — go punch a tree!';
+    invGrid.appendChild(note);
+  }
+  for (const [id, n] of entries) {
+    const el = document.createElement('div');
+    el.className = 'inv-item';
+    el.title = ITEMS[id].name + ' — click to assign to hotbar';
+    el.appendChild(iconCanvasFor(id, 36));
+    if (n > 1 || ITEMS[id].kind !== 'tool') {
+      const cnt = document.createElement('span');
+      cnt.className = 'cnt';
+      cnt.textContent = n;
+      el.appendChild(cnt);
+    }
+    el.addEventListener('click', () => { inventory.assignToHotbar(id); });
+    invGrid.appendChild(el);
+  }
+
+  // hotbar mirror
+  invHotbar.innerHTML = '';
+  for (let i = 0; i < 9; i++) {
+    const id = inventory.hotbar[i];
+    const el = document.createElement('div');
+    el.className = 'inv-slot' + (id == null ? ' empty' : '');
+    if (id != null) {
+      el.title = ITEMS[id].name + ' — click to remove from hotbar';
+      el.appendChild(iconCanvasFor(id, 36));
+      el.addEventListener('click', () => inventory.clearSlot(i));
+    }
+    invHotbar.appendChild(el);
+  }
+
+  // crafting
+  craftList.innerHTML = '';
+  for (const r of RECIPES) {
+    const ok = inventory.canCraft(r);
+    const row = document.createElement('div');
+    row.className = 'craft-row' + (ok ? '' : ' locked');
+    row.appendChild(iconCanvasFor(r.out, 30));
+    const name = document.createElement('span');
+    name.className = 'c-name';
+    name.textContent = ITEMS[r.out].name + (r.n > 1 ? ` ×${r.n}` : '');
+    row.appendChild(name);
+    const ins = document.createElement('span');
+    ins.className = 'c-in';
+    ins.innerHTML = r.in.map(([id, n]) =>
+      `<span class="${inventory.count(id) >= n ? 'have' : 'miss'}">${n}× ${ITEMS[id].name}</span>`
+    ).join(' + ');
+    row.appendChild(ins);
+    if (ok) {
+      row.addEventListener('click', () => {
+        if (inventory.craft(r)) {
+          sfx.craft();
+          toast('Crafted ' + ITEMS[r.out].name);
+        }
+      });
+    }
+    craftList.appendChild(row);
+  }
+}
+
+inventory.onChange = () => {
+  renderHotbar();
+  updateHeldItem();
+  if (invOpen) renderInvScreen();
+};
+
+// ---------------------------------------------------------------------------
 // Input
 
 const keys = new Set();
 let locked = false;
 let started = false;
+let forceStarted = false; // for automated testing without pointer lock
+let firstStartHint = isNewPlayer;
 
 function isLocked() { return locked || forceStarted; }
-let forceStarted = false; // for automated testing without pointer lock
 
 document.getElementById('playBtn').addEventListener('click', () => {
   initAudio();
@@ -339,10 +545,14 @@ document.addEventListener('pointerlockchange', () => {
     overlay.classList.add('hidden');
     overlayTitle.textContent = 'PAUSED';
     document.getElementById('playBtn').textContent = '▶ Resume';
+    if (firstStartHint) {
+      firstStartHint = false;
+      toast('Punch a tree trunk to gather wood — press E to craft!', 8);
+    }
   } else {
     keys.clear();
     breakingHeld = placingHeld = false;
-    if (!player.dead) overlay.classList.remove('hidden');
+    if (!player.dead && !invOpen) overlay.classList.remove('hidden');
   }
 });
 
@@ -351,33 +561,39 @@ document.addEventListener('mousemove', (e) => {
 });
 
 document.addEventListener('keydown', (e) => {
+  if (invOpen && (e.code === 'KeyE' || e.code === 'Escape')) {
+    e.preventDefault();
+    closeInventory();
+    return;
+  }
   if (!isLocked()) return;
-  if (['Space', 'ArrowUp', 'ArrowDown', 'F3'].includes(e.code) || e.code === 'F3') e.preventDefault();
+  if (['Space', 'ArrowUp', 'ArrowDown', 'F3', 'KeyE'].includes(e.code)) e.preventDefault();
   keys.add(e.code);
   if (e.code === 'KeyF') player.fly = !player.fly;
   if (e.code === 'F3') debugEl.classList.toggle('show');
+  if (e.code === 'KeyE') openInventory();
   if (e.code.startsWith('Digit')) {
     const n = +e.code.slice(5);
-    if (n >= 1 && n <= PALETTE.length) setSelected(n - 1);
+    if (n >= 1 && n <= 9) setSelected(n - 1);
   }
 });
 document.addEventListener('keyup', (e) => keys.delete(e.code));
 window.addEventListener('blur', () => { keys.clear(); breakingHeld = placingHeld = false; });
 
 document.addEventListener('wheel', (e) => {
-  if (!isLocked()) return;
+  if (!isLocked() || invOpen) return;
   setSelected(selected + (e.deltaY > 0 ? 1 : -1));
 }, { passive: true });
 
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 
 let breakingHeld = false, placingHeld = false;
-let actionCd = 0;
+let placeCd = 0;
 canvas.addEventListener('mousedown', (e) => {
-  if (!isLocked()) return;
-  if (e.button === 0) { breakingHeld = true; doAction('break'); }
+  if (!isLocked() || invOpen) return;
+  if (e.button === 0) breakingHeld = true;
   if (e.button === 1) { e.preventDefault(); pickBlock(); }
-  if (e.button === 2) { placingHeld = true; doAction('place'); }
+  if (e.button === 2) { placingHeld = true; useHeld(); placeCd = 0.25; }
 });
 document.addEventListener('mouseup', (e) => {
   if (e.button === 0) breakingHeld = false;
@@ -422,28 +638,96 @@ function currentTarget() {
   return raycastVoxel(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, REACH);
 }
 
-function doAction(kind) {
-  if (player.dead) return;
-  swingT = 0;
+// ---------------------------------------------------------------------------
+// Mining (hold to break), attacking, placing, eating
+
+let mining = null; // {x,y,z,blockId,progress,total}
+let punchCd = 0;
+let miningParticleT = 0;
+
+function stopMining() {
+  mining = null;
+  crackMesh.visible = false;
+}
+
+function finishBreak(hit, info) {
+  if (info.canHarvest) {
+    const d = info.drop(Math.random());
+    if (d) drops.spawn(d[0], d[1], hit.x + 0.5, hit.y + 0.35, hit.z + 0.5);
+  }
+  world.setBlock(hit.x, hit.y, hit.z, B.AIR);
+  const c = avgColors[hit.id] || [0.5, 0.5, 0.5];
+  particles.burst(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, c, 14, 3.2);
+  sfx.break();
+  stopMining();
+}
+
+function updateMining(dt) {
+  punchCd -= dt;
+  if (!breakingHeld || player.dead || invOpen) { stopMining(); return; }
+
   const eye = player.eye();
   const dir = player.forwardDir();
+  const mobHit = mobs.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, 3.5);
+  const hit = currentTarget();
 
-  if (kind === 'break') {
-    // punch mobs first
-    const mobHit = mobs.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, 3.5);
-    const blockHit = currentTarget();
-    if (mobHit && (!blockHit || mobHit.t < blockHit.t)) {
-      mobHit.mob.hurt(6, dir.x, dir.z, { player });
+  // attack mobs when the crosshair is on one
+  if (mobHit && (!hit || mobHit.t < hit.t)) {
+    stopMining();
+    if (punchCd <= 0) {
+      punchCd = 0.5;
+      swingT = 0;
+      mobHit.mob.hurt(itemDamage(heldId()), dir.x, dir.z, { player });
       sfx.hit();
-      return;
     }
-    if (blockHit && BLOCKS[blockHit.id].breakable) {
-      world.setBlock(blockHit.x, blockHit.y, blockHit.z, B.AIR);
-      const c = avgColors[blockHit.id] || [0.5, 0.5, 0.5];
-      particles.burst(blockHit.x + 0.5, blockHit.y + 0.5, blockHit.z + 0.5, c, 14, 3.2);
-      sfx.break();
-    }
-  } else if (kind === 'place') {
+    return;
+  }
+  if (!hit) { stopMining(); return; }
+
+  const info = breakInfo(hit.id, heldId());
+  if (!info) { stopMining(); return; } // bedrock etc.
+
+  if (!mining || mining.x !== hit.x || mining.y !== hit.y || mining.z !== hit.z || mining.blockId !== hit.id) {
+    mining = { x: hit.x, y: hit.y, z: hit.z, blockId: hit.id, progress: 0, total: info.time };
+  }
+  mining.progress += dt;
+
+  if (swingT > 0.45) swingT = 0; // keep swinging while mining
+
+  if (!info.canHarvest && info.needTool) {
+    toast(`Needs a ${TIER_NAMES[Math.max(1, info.needTier)]} ${info.needTool} to drop items`, 0.4);
+  }
+
+  miningParticleT -= dt;
+  if (miningParticleT <= 0) {
+    miningParticleT = 0.18;
+    const c = avgColors[hit.id] || [0.5, 0.5, 0.5];
+    particles.burst(
+      hit.x + 0.5 + hit.face[0] * 0.55,
+      hit.y + 0.5 + hit.face[1] * 0.55,
+      hit.z + 0.5 + hit.face[2] * 0.55,
+      c, 2, 1.4
+    );
+    sfx.mine();
+  }
+
+  if (mining.progress >= mining.total) {
+    finishBreak(hit, info);
+    return;
+  }
+  const stage = Math.min(4, (mining.progress / mining.total * 5) | 0);
+  crackMat.map = crackTextures[stage];
+  crackMesh.visible = true;
+  crackMesh.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
+}
+
+function useHeld() {
+  if (player.dead || invOpen) return;
+  const id = heldId();
+  const it = ITEMS[id];
+  if (!it) return;
+
+  if (it.kind === 'block') {
     const hit = currentTarget();
     if (!hit) return;
     const px = hit.x + hit.face[0], py = hit.y + hit.face[1], pz = hit.z + hit.face[2];
@@ -453,15 +737,24 @@ function doAction(kind) {
     if (blockOverlapsEntity(px, py, pz, player)) return;
     if (mobs.anyOverlapping(px, py, pz)) return;
     if (!world.hasDataAt(px, pz)) return;
-    world.setBlock(px, py, pz, PALETTE[selected]);
+    if (inventory.count(id) < 1) return;
+    swingT = 0;
+    world.setBlock(px, py, pz, id);
+    inventory.remove(id, 1);
     sfx.place();
+  } else if (it.kind === 'food') {
+    if (player.hp >= player.maxHp) { toast('Health already full'); return; }
+    swingT = 0;
+    player.hp = Math.min(player.maxHp, player.hp + it.heal);
+    inventory.remove(id, 1);
+    sfx.eat();
   }
 }
 
 function pickBlock() {
   const hit = currentTarget();
   if (!hit) return;
-  const idx = PALETTE.indexOf(hit.id);
+  const idx = inventory.hotbar.indexOf(hit.id);
   if (idx >= 0) setSelected(idx);
 }
 
@@ -514,6 +807,7 @@ function save() {
       seed: world.seed,
       timeOfDay,
       player: { pos: player.pos, yaw: player.yaw, pitch: player.pitch, hp: player.hp, sel: selected },
+      inventory: inventory.serialize(),
       edits,
     }));
   } catch (e) { /* storage full or unavailable */ }
@@ -527,11 +821,16 @@ window.addEventListener('beforeunload', save);
 const clock = new THREE.Clock();
 let fps = 60, fpsSmooth = 60;
 let debugT = 0;
+let simTime = 0;
 
 function animate() {
   requestAnimationFrame(animate);
-  const dt = Math.min(clock.getDelta(), 0.05);
-  const time = clock.elapsedTime;
+  frame(Math.min(clock.getDelta(), 0.05));
+}
+
+function frame(dt) {
+  simTime += dt;
+  const time = simTime;
   fps = 1 / Math.max(dt, 1e-4);
   fpsSmooth += (fps - fpsSmooth) * 0.05;
 
@@ -539,16 +838,16 @@ function animate() {
   world.flushDirty();
 
   if (started || forceStarted) {
-    player.update(dt, isLocked() ? keys : new Set(), time);
-    mobs.update(dt, { world, player, daylight, time, sfx, particles });
+    player.update(dt, isLocked() && !invOpen ? keys : new Set(), time);
+    mobs.update(dt, { world, player, daylight, time, sfx, particles, drops });
+    drops.update(dt, { player, inventory, onPickup: () => sfx.pickup() });
+    updateMining(dt);
 
-    // held-repeat mining / placing
-    actionCd -= dt;
-    if ((breakingHeld || placingHeld) && actionCd <= 0) {
-      actionCd = 0.22;
-      doAction(breakingHeld ? 'break' : 'place');
-    } else if (!breakingHeld && !placingHeld) {
-      actionCd = 0;
+    // held-repeat placing / eating
+    placeCd -= dt;
+    if (placingHeld && placeCd <= 0) {
+      useHeld();
+      placeCd = ITEMS[heldId()]?.kind === 'food' ? 0.7 : 0.25;
     }
   }
 
@@ -564,16 +863,16 @@ function animate() {
     camera.updateProjectionMatrix();
   }
 
-  // held block swing animation
+  // held item swing animation
   swingT += dt * 7;
   if (heldMesh) {
     const s = Math.min(swingT, Math.PI);
-    heldGroup.rotation.x = 0.12 - Math.sin(s) * 0.6;
-    heldGroup.position.y = -0.42 - Math.sin(s) * 0.12;
+    heldGroup.rotation.x = (ITEMS[heldId()]?.kind === 'block' ? 0.12 : 0.1) - Math.sin(s) * 0.6;
+    heldGroup.position.y = -0.46 - Math.sin(s) * 0.12;
   }
 
   // block highlight
-  const hit = isLocked() || forceStarted ? currentTarget() : null;
+  const hit = (isLocked() && !invOpen) ? currentTarget() : null;
   if (hit) {
     highlight.visible = true;
     highlight.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
@@ -595,7 +894,7 @@ function animate() {
     scene.fog.far = renderDist * CHUNK * 0.95;
   }
 
-  // block name fade
+  // toast fade
   if (blockNameT > 0) {
     blockNameT -= dt;
     if (blockNameT <= 0) blockNameEl.style.opacity = 0;
@@ -607,15 +906,15 @@ function animate() {
     debugT = 0.25;
     debugEl.textContent =
       `FPS ${fpsSmooth.toFixed(0)}  |  XYZ ${player.pos.x.toFixed(1)} / ${player.pos.y.toFixed(1)} / ${player.pos.z.toFixed(1)}\n` +
-      `chunks ${world.chunks.size}  mobs ${mobs.mobs.length}  time ${timeOfDay.toFixed(2)}  daylight ${daylight.toFixed(2)}\n` +
+      `chunks ${world.chunks.size}  mobs ${mobs.mobs.length}  drops ${drops.list.length}  time ${timeOfDay.toFixed(2)}  daylight ${daylight.toFixed(2)}\n` +
       `seed ${world.seed >>> 0}  renderDist ${renderDist}  fly ${player.fly}`;
   }
 
   renderer.render(scene, camera);
 }
 
-buildHotbar();
-updateHeldBlock();
+renderHotbar();
+updateHeldItem();
 updateHearts();
 animate();
 
@@ -623,10 +922,24 @@ animate();
 // Debug hooks (used by automated tests; harmless in production)
 
 window.__game = {
-  world, player, mobs, camera, renderer, particles, keys,
+  world, player, mobs, camera, renderer, particles, keys, inventory, drops,
   setTime: (t) => { timeOfDay = t; },
   getTime: () => timeOfDay,
   getDaylight: () => daylight,
   forceStart: () => { forceStarted = true; started = true; overlay.classList.add('hidden'); },
-  doAction, currentTarget, setSelected,
+  currentTarget, setSelected, useHeld,
+  give: (id, n = 1) => inventory.add(id, n),
+  breakTarget: () => {
+    const hit = currentTarget();
+    if (!hit) return null;
+    const info = breakInfo(hit.id, heldId());
+    if (!info) return null;
+    finishBreak(hit, info);
+    return hit;
+  },
+  openInventory, closeInventory,
+  I, ITEMS, RECIPES,
+  state: () => ({ breakingHeld, placingHeld, mining: mining && { ...mining }, invOpen, locked, forceStarted, punchCd }),
+  setBreaking: (v) => { breakingHeld = v; },
+  step: (dt = 0.05, n = 1) => { for (let i = 0; i < n; i++) frame(dt); },
 };

@@ -4,6 +4,15 @@
 import * as THREE from 'three';
 import { moveEntity, isWaterAt, rayVsEntity } from './physics.js';
 import { B } from './blocks.js';
+import { I } from './items.js';
+
+// [itemId, min, max] rolls per mob type
+const DROP_TABLE = {
+  pig: [[I.PORKCHOP, 1, 2]],
+  sheep: [[B.WOOL, 1, 2], [I.MUTTON, 1, 1]],
+  cow: [[I.BEEF, 1, 2]],
+  zombie: [[I.FLESH, 0, 2]],
+};
 
 const GRAVITY = 26;
 
@@ -279,6 +288,12 @@ export class MobManager {
           const c = new THREE.Color(m.color);
           ctx.particles.burst(m.pos.x, m.pos.y + m.height / 2, m.pos.z, [c.r, c.g, c.b], 16, 3);
           if (ctx.sfx) ctx.sfx.pop();
+          if (ctx.drops) {
+            for (const [id, min, max] of DROP_TABLE[m.type] || []) {
+              const n = min + Math.floor(Math.random() * (max - min + 1));
+              if (n > 0) ctx.drops.spawn(id, n, m.pos.x, m.pos.y + 0.4, m.pos.z);
+            }
+          }
         }
         m.dispose(this.scene);
         this.mobs.splice(i, 1);
