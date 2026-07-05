@@ -6,8 +6,20 @@
   <title>WebCraft — Minecraft in your browser</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='6' fill='%2378b74a'/><rect y='6' width='16' height='10' fill='%23795c3a'/></svg>">
   <link rel="stylesheet" href="./style.css">
-  <script type="importmap">
-    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+  <script>
+    // Cache-bust all game modules per page load so a deploy can never serve a
+    // mixed set of old/new files (GitHub Pages caches each file independently
+    // for 10 minutes, which otherwise causes version-skew bugs).
+    (function () {
+      var V = Date.now();
+      var mods = ['noise', 'blocks', 'physics', 'sound', 'world', 'player', 'mobs', 'items', 'inventory', 'drops', 'main'];
+      var imports = { three: 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js' };
+      for (var i = 0; i < mods.length; i++) {
+        imports['./js/' + mods[i] + '.js'] = './js/' + mods[i] + '.js?v=' + V;
+      }
+      window.__BUILD_V = V;
+      document.write('<script type="importmap">' + JSON.stringify({ imports: imports }) + '<\/script>');
+    })();
   </script>
 </head>
 <body>
@@ -78,6 +90,8 @@
     <div id="invTooltip"></div>
   </div>
 
-  <script type="module" src="./js/main.js"></script>
+  <script>
+    document.write('<script type="module" src="./js/main.js?v=' + window.__BUILD_V + '"><\/script>');
+  </script>
 </body>
 </html>

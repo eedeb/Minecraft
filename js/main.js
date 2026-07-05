@@ -988,6 +988,11 @@ canvas.addEventListener('mousedown', (e) => {
 document.addEventListener('mouseup', (e) => {
   if (e.button === 0) breakingHeld = false;
   if (e.button === 2) placingHeld = false;
+  // mouse side buttons would navigate back/forward and dump you out of the game
+  if ((e.button === 3 || e.button === 4) && (isLocked() || invOpen)) e.preventDefault();
+});
+document.addEventListener('mousedown', (e) => {
+  if ((e.button === 3 || e.button === 4) && (isLocked() || invOpen)) e.preventDefault();
 });
 
 window.addEventListener('resize', () => {
