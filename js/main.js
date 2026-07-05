@@ -920,7 +920,7 @@ document.addEventListener('mousemove', (e) => {
   if (locked) player.look(e.movementX, e.movementY);
 });
 
-let lastWTap = -1;
+let lastWRelease = -1;
 document.addEventListener('keydown', (e) => {
   if (invOpen) {
     if (e.code === 'KeyE' || e.code === 'Escape') {
@@ -942,11 +942,11 @@ document.addEventListener('keydown', (e) => {
   e.preventDefault(); // with keyboard lock active, keep every shortcut in-game
   // with the keyboard locked (fullscreen), Esc reaches us instead of the browser
   if (e.code === 'Escape') { document.exitPointerLock(); return; }
-  // double-tap W to sprint (Ctrl+W is eaten by browsers)
+  // double-tap W to sprint: MC-style — arm if W is pressed shortly after it
+  // was RELEASED, so re-tapping while already walking also works
   if (e.code === 'KeyW' && !e.repeat) {
     const now = performance.now() / 1000;
-    if (now - lastWTap < 0.35) player.wantSprint = true;
-    lastWTap = now;
+    if (now - lastWRelease < 0.35) player.wantSprint = true;
   }
   keys.add(e.code);
   if (e.code === 'KeyF') player.fly = !player.fly;
@@ -958,13 +958,22 @@ document.addEventListener('keydown', (e) => {
     if (n >= 1 && n <= 9) setSelected(n - 1);
   }
 });
-document.addEventListener('keyup', (e) => keys.delete(e.code));
+document.addEventListener('keyup', (e) => {
+  keys.delete(e.code);
+  if (e.code === 'KeyW') lastWRelease = performance.now() / 1000;
+});
 window.addEventListener('blur', () => { keys.clear(); breakingHeld = placingHeld = false; });
 
+// non-passive so we can block Ctrl+scroll / pinch browser zoom while playing
 document.addEventListener('wheel', (e) => {
-  if (!isLocked() || invOpen) return;
+  if (invOpen) {
+    if (e.ctrlKey) e.preventDefault(); // no zoom, but keep panel scrolling
+    return;
+  }
+  if (!isLocked()) return;
+  e.preventDefault();
   setSelected(selected + (e.deltaY > 0 ? 1 : -1));
-}, { passive: true });
+}, { passive: false });
 
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 
