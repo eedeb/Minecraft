@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import { moveEntity, isWaterAt, isLavaAt, rayVsEntity } from './physics.js';
-import { B } from './blocks.js';
+import { B, isSolid } from './blocks.js';
 import { I } from './items.js';
 
 // [itemId, min, max] rolls per mob type
@@ -12,6 +12,7 @@ const DROP_TABLE = {
   sheep: [[B.WOOL, 1, 2], [I.MUTTON, 1, 1]],
   cow: [[I.BEEF, 1, 2]],
   zombie: [[I.FLESH, 0, 2]],
+  blaze: [[I.BLAZE_ROD, 0, 1]],
 };
 
 const GRAVITY = 26;
@@ -21,6 +22,7 @@ const TYPES = {
   sheep: { hp: 8, speed: 1.5, half: 0.4, height: 1.0, color: 0xe8e8e8 },
   cow: { hp: 10, speed: 1.5, half: 0.4, height: 1.25, color: 0x6e4a2f },
   zombie: { hp: 20, speed: 2.7, half: 0.3, height: 1.8, color: 0x5da357 },
+  blaze: { hp: 20, speed: 1.6, half: 0.35, height: 1.6, color: 0xe8a428 },
 };
 
 function box(w, h, d, color, x, y, z) {
@@ -89,6 +91,19 @@ const MODELS = {
     legs.forEach(l => g.add(l));
     return { legs, head };
   },
+  blaze(g) {
+    const gold = 0xe8a428, dark = 0xb87818;
+    const head = box(0.45, 0.45, 0.45, gold, 0, 1.25, 0);
+    eyes(head, 0.22, -0.23, 0x2a1400);
+    g.add(head);
+    const rods = new THREE.Group();
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      rods.add(box(0.12, 0.55, 0.12, dark, Math.cos(a) * 0.35, 0.6, Math.sin(a) * 0.35));
+    }
+    g.add(rods);
+    return { legs: [], head, rods };
+  },
   zombie(g) {
     const skin = 0x5da357, shirt = 0x2f7ba6, pants = 0x35506e;
     const legs = [
@@ -113,7 +128,9 @@ export class Mob {
     const t = TYPES[type];
     this.id = nextId++;
     this.type = type;
-    this.hostile = type === 'zombie';
+    this.hostile = type === 'zombie' || type === 'blaze';
+    this.flying = type === 'blaze';
+    this.shootCd = 2 + Math.random() * 2;
     this.hp = t.hp;
     this.speed = t.speed;
     this.half = t.half;
@@ -154,7 +171,29 @@ export class Mob {
 
     // --- AI ---
     let wantSpeed = 0;
-    if (this.hostile) {
+    if (this.flying) {
+      // blaze: hover near the player, lob fireballs
+      const dx = player.pos.x - this.pos.x, dz = player.pos.z - this.pos.z;
+      const dist = Math.hypot(dx, dz);
+      this.shootCd -= dt;
+      if (!player.dead && dist < 24) {
+        this.targetYaw = Math.atan2(-dx, -dz);
+        if (dist > 9) wantSpeed = this.speed;
+        else if (dist < 5) wantSpeed = -this.speed * 0.5;
+        if (this.shootCd <= 0 && dist < 16) {
+          this.shootCd = 2.5 + Math.random() * 1.5;
+          if (ctx.shoot) ctx.shoot(this);
+        }
+        if (dist < 1.4 && this.attackCd <= 0) {
+          this.attackCd = 1.2;
+          player.damage(2, time, 'fire');
+          player.burnT = Math.max(player.burnT, 1.5);
+          if (ctx.sfx) ctx.sfx.hurt();
+        }
+      } else {
+        wantSpeed = this.wander(dt) * 0.5;
+      }
+    } else if (this.hostile) {
       const dx = player.pos.x - this.pos.x, dz = player.pos.z - this.pos.z;
       const dist = Math.hypot(dx, dz);
       // burn in daylight
@@ -200,21 +239,27 @@ export class Mob {
     const blend = Math.min(1, 10 * dt);
     this.vel.x += (mx - this.vel.x) * blend;
     this.vel.z += (mz - this.vel.z) * blend;
-    if (inWater) {
+    if (this.flying) {
+      // hover: drift toward the player's eye level + a gentle bob
+      const targetY = (ctx.player.pos.y + 1.5) + Math.sin(this.walkPhase + this.id) * 0.5;
+      const dy = targetY - this.pos.y;
+      this.vel.y += (Math.max(-2, Math.min(2, dy)) - this.vel.y) * Math.min(1, 3 * dt);
+      this.walkPhase += dt * 1.5;
+    } else if (inWater) {
       this.vel.y += (2.2 - this.vel.y) * Math.min(1, 3 * dt); // float up / bob
     } else {
       this.vel.y -= GRAVITY * dt;
       if (this.vel.y < -50) this.vel.y = -50;
     }
     const { onGround, hitWall } = moveEntity(world, this, dt);
-    if (hitWall && onGround && wantSpeed > 0 && this.jumpCd <= 0) {
+    if (hitWall && onGround && !this.flying && wantSpeed > 0 && this.jumpCd <= 0) {
       this.vel.y = 7.5; // hop up 1-block steps
       this.jumpCd = 0.5;
     }
     if (this.pos.y < -20) this.dead = true;
 
-    // mobs burn in lava
-    if (isLavaAt(world, this.pos.x, this.pos.y + 0.2, this.pos.z)) {
+    // mobs burn in lava (blazes are fireproof)
+    if (!this.flying && isLavaAt(world, this.pos.x, this.pos.y + 0.2, this.pos.z)) {
       this.hp -= 4 * dt;
       this.flashT = 0.15;
       this.burnT = 1;
@@ -223,9 +268,10 @@ export class Mob {
 
     // --- animation ---
     const hspeed = Math.hypot(this.vel.x, this.vel.z);
-    this.walkPhase += hspeed * dt * 3.2;
+    if (!this.flying) this.walkPhase += hspeed * dt * 3.2;
     const swing = Math.sin(this.walkPhase * Math.PI) * Math.min(1, hspeed) * 0.55;
     this.parts.legs.forEach((l, i) => { l.rotation.x = (i % 2 === 0 ? swing : -swing); });
+    if (this.parts.rods) this.parts.rods.rotation.y += dt * 2.5;
 
     this.group.position.set(this.pos.x, this.pos.y, this.pos.z);
     this.group.rotation.y = this.yaw;
@@ -273,18 +319,71 @@ export class Mob {
   }
 }
 
+const shotGeo = new THREE.BoxGeometry(0.28, 0.28, 0.28);
+const shotMat = new THREE.MeshBasicMaterial({ color: 0xff8c1a });
+
 export class MobManager {
   constructor(scene, world) {
     this.scene = scene;
     this.world = world;
     this.mobs = [];
+    this.shots = []; // blaze fireballs
     this.spawnT = 2;
     this.passiveCap = 8;
     this.zombieCap = 6;
+    this.blazeCap = 5;
+  }
+
+  // hide/show everything when the player switches dimension
+  setActive(v) {
+    for (const m of this.mobs) m.group.visible = v;
+    for (const s of this.shots) s.mesh.visible = v;
+  }
+
+  spawnShot(mob, player) {
+    const ox = mob.pos.x, oy = mob.pos.y + 1.2, oz = mob.pos.z;
+    const tx = player.pos.x - ox, ty = (player.pos.y + 1.2) - oy, tz = player.pos.z - oz;
+    const len = Math.hypot(tx, ty, tz) || 1;
+    const mesh = new THREE.Mesh(shotGeo, shotMat);
+    mesh.position.set(ox, oy, oz);
+    this.scene.add(mesh);
+    this.shots.push({
+      pos: { x: ox, y: oy, z: oz },
+      vel: { x: (tx / len) * 11, y: (ty / len) * 11, z: (tz / len) * 11 },
+      ttl: 4, mesh,
+    });
+  }
+
+  updateShots(dt, ctx) {
+    const p = ctx.player;
+    for (let i = this.shots.length - 1; i >= 0; i--) {
+      const s = this.shots[i];
+      s.ttl -= dt;
+      s.pos.x += s.vel.x * dt; s.pos.y += s.vel.y * dt; s.pos.z += s.vel.z * dt;
+      s.mesh.position.set(s.pos.x, s.pos.y, s.pos.z);
+      s.mesh.rotation.x += dt * 8; s.mesh.rotation.y += dt * 6;
+      const hitPlayer = !p.dead &&
+        Math.abs(s.pos.x - p.pos.x) < 0.6 && Math.abs(s.pos.z - p.pos.z) < 0.6 &&
+        s.pos.y > p.pos.y - 0.2 && s.pos.y < p.pos.y + 2.0;
+      const b = ctx.world.getBlock(Math.floor(s.pos.x), Math.floor(s.pos.y), Math.floor(s.pos.z));
+      const hitBlock = isSolid(b);
+      if (hitPlayer) {
+        p.damage(4, ctx.time, 'fire');
+        p.burnT = Math.max(p.burnT, 2);
+        if (ctx.sfx) ctx.sfx.hurt();
+      }
+      if (s.ttl <= 0 || hitPlayer || hitBlock) {
+        if (ctx.particles) ctx.particles.burst(s.pos.x, s.pos.y, s.pos.z, [1, 0.55, 0.1], 8, 2.5);
+        this.scene.remove(s.mesh);
+        this.shots.splice(i, 1);
+      }
+    }
   }
 
   update(dt, ctx) {
+    ctx.shoot = (mob) => { this.spawnShot(mob, ctx.player); if (ctx.sfx) ctx.sfx.fireball(); };
     for (const m of this.mobs) m.update(dt, ctx);
+    this.updateShots(dt, ctx);
 
     // remove dead / distant
     const p = ctx.player.pos;
@@ -318,6 +417,28 @@ export class MobManager {
 
   trySpawn(ctx) {
     const { player, daylight } = ctx;
+
+    const ang = Math.random() * Math.PI * 2;
+    const dist = 24 + Math.random() * 24;
+    const x = Math.floor(player.pos.x + Math.cos(ang) * dist);
+    const z = Math.floor(player.pos.z + Math.sin(ang) * dist);
+    if (!this.world.hasDataAt(x, z)) return;
+
+    // the nether spawns blazes in mid-air pockets
+    if (this.world.dim === 'nether') {
+      const blazes = this.mobs.filter(m => m.type === 'blaze').length;
+      if (blazes >= this.blazeCap) return;
+      for (let y = 30; y < 52; y++) {
+        if (this.world.getBlock(x, y, z) === B.AIR && this.world.getBlock(x, y + 1, z) === B.AIR) {
+          const mob = new Mob('blaze', x + 0.5, y + 0.01, z + 0.5);
+          this.mobs.push(mob);
+          this.scene.add(mob.group);
+          return;
+        }
+      }
+      return;
+    }
+
     const night = daylight < 0.25;
     const passives = this.mobs.filter(m => !m.hostile).length;
     const zombies = this.mobs.length - passives;
@@ -330,11 +451,6 @@ export class MobManager {
     }
     if (!type) return;
 
-    const ang = Math.random() * Math.PI * 2;
-    const dist = 24 + Math.random() * 24;
-    const x = Math.floor(player.pos.x + Math.cos(ang) * dist);
-    const z = Math.floor(player.pos.z + Math.sin(ang) * dist);
-    if (!this.world.hasDataAt(x, z)) return;
     const surf = this.world.getSurface(x, z);
     if (!surf || surf.id === B.WATER || surf.id === B.LEAVES) return;
     if (surf.y >= 70) return;

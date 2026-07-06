@@ -81,6 +81,12 @@ html, body {
   opacity: 0; transition: opacity 0.25s;
 }
 
+#portalOverlay {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at center, rgba(140,40,220,0.35) 0%, rgba(80,10,140,0.75) 100%);
+  opacity: 0; transition: opacity 0.3s;
+}
+
 #blockname {
   position: absolute; bottom: 110px; left: 50%;
   transform: translateX(-50%);

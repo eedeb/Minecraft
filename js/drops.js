@@ -19,6 +19,11 @@ export class DropManager {
 
   // opts.stack: spawn one entity holding all n items (Q-drops)
   // opts.throwDir: initial velocity direction (thrown from the player)
+  // hide/show all drop meshes when the player switches dimension
+  setActive(v) {
+    for (const e of this.list) e.mesh.visible = v;
+  }
+
   spawn(id, n, x, y, z, opts = {}) {
     const entities = opts.stack ? [n] : new Array(n).fill(1);
     for (const count of entities) {

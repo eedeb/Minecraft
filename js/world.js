@@ -24,10 +24,11 @@ const FACES = [
 const key = (cx, cz) => cx + ',' + cz;
 
 export class World {
-  constructor(seed, scene, materials, renderDist = 4) {
+  constructor(seed, scene, materials, renderDist = 4, dim = 'overworld') {
     this.seed = seed | 0;
+    this.dim = dim;
     this.scene = scene;
-    this.materials = materials; // {opaque, water}
+    this.materials = materials; // {opaque, water, lava}
     this.renderDist = renderDist;
     this.chunks = new Map();    // key -> {cx, cz, data, meshO, meshW, hasMesh}
     this.edits = new Map();     // chunkKey -> Map("lx,y,lz" -> id)
@@ -67,7 +68,41 @@ export class World {
     return n1 * n1 + n2 * n2 < 0.012;
   }
 
+  // Nether: netherrack floor + ceiling with a cavernous middle, lava ocean,
+  // and noise pillars connecting them.
+  genNetherChunk(cx, cz) {
+    const data = new Uint8Array(CHUNK * CHUNK * HEIGHT);
+    const p = this.pNoise;
+    const LAVA_SEA = 26;
+    const baseX = cx * CHUNK, baseZ = cz * CHUNK;
+    for (let lz = 0; lz < CHUNK; lz++) {
+      for (let lx = 0; lx < CHUNK; lx++) {
+        const wx = baseX + lx, wz = baseZ + lz;
+        const floorH = Math.round(24 + fbm2(p, wx * 0.02, wz * 0.02, 3) * 12);
+        const ceilH = Math.round(58 + fbm2(p, wx * 0.015 + 700, wz * 0.015 - 700, 3) * 10);
+        for (let y = 0; y < HEIGHT; y++) {
+          let id = B.AIR;
+          if (y <= 1 || y >= HEIGHT - 2) id = B.BEDROCK;
+          else if (y <= floorH || y >= ceilH) id = B.NETHERRACK;
+          else if (this.pCave1.noise3(wx * 0.05, y * 0.05, wz * 0.05) > 0.42) id = B.NETHERRACK; // pillars
+          else if (y <= LAVA_SEA) id = B.LAVA;
+          data[lx + lz * CHUNK + y * CHUNK * CHUNK] = id;
+        }
+      }
+    }
+    const ce = this.edits.get(key(cx, cz));
+    if (ce) {
+      for (const [lkey, id] of ce) {
+        const [lx, y, lz] = lkey.split(',').map(Number);
+        if (lx >= 0 && lx < CHUNK && y >= 0 && y < HEIGHT && lz >= 0 && lz < CHUNK)
+          data[lx + lz * CHUNK + y * CHUNK * CHUNK] = id;
+      }
+    }
+    return data;
+  }
+
   genChunkData(cx, cz) {
+    if (this.dim === 'nether') return this.genNetherChunk(cx, cz);
     const data = new Uint8Array(CHUNK * CHUNK * HEIGHT);
     const PAD = 3; // extra columns so trees from neighbor chunks reach in
     const W = CHUNK + PAD * 2;
@@ -242,7 +277,7 @@ export class World {
           if (id === B.AIR) continue;
           const blk = BLOCKS[id];
           const water = id === B.WATER;
-          const lava = id === B.LAVA;
+          const lava = id === B.LAVA || id === B.PORTAL; // both render unlit/glowing
 
           for (const f of FACES) {
             const nb = get(lx + f.dir[0], y + f.dir[1], lz + f.dir[2]);
@@ -369,6 +404,11 @@ export class World {
       if (c && c.hasMesh) this.buildMesh(c.cx, c.cz);
     }
     this.dirty.clear();
+  }
+
+  // Drop every chunk mesh (used when leaving this dimension); data stays cached.
+  unloadAll() {
+    for (const c of this.chunks.values()) this.disposeMeshes(c);
   }
 
   unloadFar(pcx, pcz) {

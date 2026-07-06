@@ -138,12 +138,22 @@ function itemTexture(id) {
 // ---------------------------------------------------------------------------
 // World / player / inventory
 
-const world = new World(seed, scene, materials, renderDist);
+let dim = saved?.dim === 'nether' ? 'nether' : 'overworld';
+const worldOver = new World(seed, scene, materials, renderDist, 'overworld');
+const worldNether = new World((seed ^ 0x5a17c3) | 0, scene, materials, renderDist, 'nether');
 if (saved && saved.edits) {
-  for (const [ck, entries] of saved.edits) world.edits.set(ck, new Map(entries));
+  for (const [ck, entries] of saved.edits) worldOver.edits.set(ck, new Map(entries));
 }
+if (saved && saved.editsN) {
+  for (const [ck, entries] of saved.editsN) worldNether.edits.set(ck, new Map(entries));
+}
+const dims = {
+  overworld: { world: worldOver, portals: saved?.portals?.overworld || [] },
+  nether: { world: worldNether, portals: saved?.portals?.nether || [] },
+};
+let world = dims[dim].world;
 
-const spawnPoint = world.findSpawn();
+const spawnPoint = worldOver.findSpawn();
 const player = new Player(world, spawnPoint);
 if (saved && saved.player) {
   player.pos = { ...saved.player.pos };
@@ -183,7 +193,11 @@ if (saved?.player) {
     for (let dx = -1; dx <= 1; dx++) world.buildMesh(pcx + dx, pcz + dz);
 }
 
-const mobs = new MobManager(scene, world);
+const mobsByDim = {
+  overworld: new MobManager(scene, worldOver),
+  nether: new MobManager(scene, worldNether),
+};
+let mobs = mobsByDim[dim];
 
 // ---------------------------------------------------------------------------
 // Particles
@@ -278,11 +292,189 @@ function cachedBlockGeometry(id) {
   return blockGeoCache.get(id);
 }
 
-const drops = new DropManager(scene, world, {
+const dropResources = {
   blockGeometry: cachedBlockGeometry,
   blockMaterial: materials.opaque,
   itemTexture,
-});
+};
+const dropsByDim = {
+  overworld: new DropManager(scene, worldOver, dropResources),
+  nether: new DropManager(scene, worldNether, dropResources),
+};
+let drops = dropsByDim[dim];
+
+// ---------------------------------------------------------------------------
+// Dimensions & nether portals
+
+const DIRS6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+const dimPrefix = () => (dim === 'nether' ? 'N:' : '');
+let portalT = 0, portalCd = 0, inPortalNow = false;
+
+// water + lava contact turns the lava to obsidian
+function liquidContact(x, y, z) {
+  const cells = [[x, y, z], ...DIRS6.map(d => [x + d[0], y + d[1], z + d[2]])];
+  for (const [ax, ay, az] of cells) {
+    if (world.getBlock(ax, ay, az) !== B.LAVA) continue;
+    for (const d of DIRS6) {
+      if (world.getBlock(ax + d[0], ay + d[1], az + d[2]) === B.WATER) {
+        world.setBlock(ax, ay, az, B.OBSIDIAN);
+        particles.burst(ax + 0.5, ay + 0.5, az + 0.5, [0.35, 0.25, 0.5], 10, 2.5);
+        sfx.splash();
+        break;
+      }
+    }
+  }
+}
+
+// flood-fill the air inside an obsidian frame; must form a small rectangle
+function floodPortalPlane(sx, sy, sz, axis) {
+  const cells = [];
+  const seen = new Set([sx + ',' + sy + ',' + sz]);
+  const stack = [[sx, sy, sz]];
+  const dirs = axis === 'x'
+    ? [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0]]
+    : [[0, 0, 1], [0, 0, -1], [0, 1, 0], [0, -1, 0]];
+  while (stack.length) {
+    if (cells.length > 40) return null;
+    const [ax, ay, az] = stack.pop();
+    const b = world.getBlock(ax, ay, az);
+    if (b === B.AIR) {
+      cells.push([ax, ay, az]);
+      for (const d of dirs) {
+        const k = (ax + d[0]) + ',' + (ay + d[1]) + ',' + (az + d[2]);
+        if (!seen.has(k)) { seen.add(k); stack.push([ax + d[0], ay + d[1], az + d[2]]); }
+      }
+    } else if (b !== B.OBSIDIAN) {
+      return null; // frame is not sealed
+    }
+  }
+  let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9, minZ = 1e9, maxZ = -1e9;
+  for (const [ax, ay, az] of cells) {
+    minX = Math.min(minX, ax); maxX = Math.max(maxX, ax);
+    minY = Math.min(minY, ay); maxY = Math.max(maxY, ay);
+    minZ = Math.min(minZ, az); maxZ = Math.max(maxZ, az);
+  }
+  const w = axis === 'x' ? maxX - minX + 1 : maxZ - minZ + 1;
+  const h = maxY - minY + 1;
+  if (w < 2 || w > 8 || h < 3 || h > 8) return null;
+  if (cells.length !== w * h) return null;
+  return { cells, minX, minY, minZ };
+}
+
+function tryLightPortal(x, y, z) {
+  if (world.getBlock(x, y, z) !== B.AIR) return false;
+  for (const axis of ['x', 'z']) {
+    const region = floodPortalPlane(x, y, z, axis);
+    if (region) {
+      for (const [ax, ay, az] of region.cells) world.setBlock(ax, ay, az, B.PORTAL);
+      dims[dim].portals.push({ x: region.minX, y: region.minY, z: region.minZ });
+      return true;
+    }
+  }
+  return false;
+}
+
+function ensureAround(px, pz) {
+  const pcx = Math.floor(px / CHUNK), pcz = Math.floor(pz / CHUNK);
+  for (let dz = -2; dz <= 2; dz++)
+    for (let dx = -2; dx <= 2; dx++) world.ensureData(pcx + dx, pcz + dz);
+  for (let dz = -1; dz <= 1; dz++)
+    for (let dx = -1; dx <= 1; dx++) world.buildMesh(pcx + dx, pcz + dz);
+}
+
+function findNetherSpot(x, z) {
+  for (let y = 28; y < 50; y++) {
+    if (world.getBlock(x, y, z) === B.AIR && world.getBlock(x, y + 1, z) === B.AIR
+      && world.getBlock(x, y - 1, z) !== B.AIR && world.getBlock(x, y - 1, z) !== B.LAVA) {
+      return { x, y, z };
+    }
+  }
+  // carve a safe pocket
+  for (let ay = 32; ay <= 36; ay++)
+    for (let az = z - 2; az <= z + 2; az++)
+      for (let ax = x - 2; ax <= x + 2; ax++) world.setBlock(ax, ay, az, B.AIR);
+  for (let az = z - 2; az <= z + 2; az++)
+    for (let ax = x - 2; ax <= x + 2; ax++) world.setBlock(ax, 31, az, B.NETHERRACK);
+  return { x, y: 32, z };
+}
+
+// build a lit 4x5 portal (2x3 interior) with a small platform
+function buildPortalFrame(x, y, z) {
+  for (let fy = -1; fy <= 3; fy++) {
+    for (let fx = -1; fx <= 2; fx++) {
+      const interior = fx >= 0 && fx <= 1 && fy >= 0 && fy <= 2;
+      world.setBlock(x + fx, y + fy, z, interior ? B.PORTAL : B.OBSIDIAN);
+    }
+  }
+  for (let fx = -1; fx <= 2; fx++) {
+    for (let fz = -1; fz <= 1; fz++) {
+      const below = world.getBlock(x + fx, y - 1, z + fz);
+      if (!BLOCKS[below].solid) world.setBlock(x + fx, y - 1, z + fz, B.OBSIDIAN);
+    }
+  }
+  // breathing room in front of the portal
+  for (let fy = 0; fy <= 2; fy++)
+    for (let fx = 0; fx <= 1; fx++)
+      for (const dz of [-1, 1]) {
+        const b = world.getBlock(x + fx, y + fy, z + dz);
+        if (b !== B.AIR && b !== B.PORTAL) world.setBlock(x + fx, y + fy, z + dz, B.AIR);
+      }
+}
+
+function findOrBuildPortal(tx, tz) {
+  const reg = dims[dim].portals;
+  ensureAround(tx, tz);
+  for (const p of reg) {
+    if (Math.hypot(p.x - tx, p.z - tz) < 24 && world.getBlock(p.x, p.y, p.z) === B.PORTAL) return p;
+  }
+  let spot;
+  if (dim === 'nether') {
+    spot = findNetherSpot(tx, tz);
+  } else {
+    const s = world.getSurface(tx, tz);
+    spot = { x: tx, y: s ? s.y + 1 : 40, z: tz };
+  }
+  buildPortalFrame(spot.x, spot.y, spot.z);
+  reg.push(spot);
+  return spot;
+}
+
+function setDimension(target) {
+  if (target === dim) return;
+  world.unloadAll();
+  mobs.setActive(false);
+  drops.setActive(false);
+  dim = target;
+  world = dims[dim].world;
+  mobs = mobsByDim[dim];
+  drops = dropsByDim[dim];
+  mobs.setActive(true);
+  drops.setActive(true);
+  player.world = world;
+  if (window.__game) {
+    window.__game.world = world;
+    window.__game.mobs = mobs;
+    window.__game.drops = drops;
+  }
+}
+
+function switchDimension(target) {
+  const scale = target === 'nether' ? 1 / 8 : 8;
+  const tx = Math.round(player.pos.x * scale), tz = Math.round(player.pos.z * scale);
+  setDimension(target);
+  const arrive = findOrBuildPortal(tx, tz);
+  player.pos = { x: arrive.x + 0.5, y: arrive.y + 0.02, z: arrive.z + 0.5 };
+  player.prevPos = { ...player.pos };
+  player.vel = { x: 0, y: 0, z: 0 };
+  player.fallDist = 0;
+  player.burnT = 0;
+  portalCd = 3;
+  portalT = 0;
+  ensureAround(player.pos.x, player.pos.z);
+  sfx.portal();
+  toast(target === 'nether' ? 'Entering the Nether…' : 'Returning to the Overworld…', 2.5);
+  save();
+}
 
 // ---------------------------------------------------------------------------
 // Block highlight + crack overlay + held viewmodel
@@ -387,6 +579,7 @@ const tooltipEl = document.getElementById('invTooltip');
 const hungerEl = document.getElementById('hunger');
 const armorbarEl = document.getElementById('armorbar');
 const fireOverlayEl = document.getElementById('fireOverlay');
+const portalOverlayEl = document.getElementById('portalOverlay');
 const armorRowEl = document.getElementById('armorRow');
 const craftAreaEl = document.getElementById('craftArea');
 const furnacePanelEl = document.getElementById('furnacePanel');
@@ -504,7 +697,9 @@ player.onDeath = () => {
 };
 
 document.getElementById('respawnBtn').addEventListener('click', () => {
+  if (dim !== 'overworld') setDimension('overworld'); // you wake up back home
   player.respawn();
+  ensureAround(player.pos.x, player.pos.z);
   deathScreen.classList.remove('show');
   canvas.requestPointerLock();
 });
@@ -1139,13 +1334,27 @@ function finishBreak(hit, info) {
   }
   // a broken furnace spills its contents
   if (hit.id === B.FURNACE) {
-    for (const s of furnaces.breakAt(furnaces.key(hit.x, hit.y, hit.z))) {
+    for (const s of furnaces.breakAt(dimPrefix() + furnaces.key(hit.x, hit.y, hit.z))) {
       drops.spawn(s.id, s.n, hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, { stack: true });
     }
   }
   player.exhaustion += 0.005;
   // ice melts back into water below sea level
   world.setBlock(hit.x, hit.y, hit.z, (hit.id === B.ICE && hit.y <= SEA) ? B.WATER : B.AIR);
+  // breaking the frame extinguishes attached portal blocks
+  if (hit.id === B.OBSIDIAN) {
+    const stack = DIRS6.map(d => [hit.x + d[0], hit.y + d[1], hit.z + d[2]]);
+    let guard = 0;
+    while (stack.length && guard++ < 300) {
+      const [ax, ay, az] = stack.pop();
+      if (world.getBlock(ax, ay, az) === B.PORTAL) {
+        world.setBlock(ax, ay, az, B.AIR);
+        for (const d of DIRS6) stack.push([ax + d[0], ay + d[1], az + d[2]]);
+      }
+    }
+    dims[dim].portals = dims[dim].portals.filter(p => world.getBlock(p.x, p.y, p.z) === B.PORTAL);
+  }
+  liquidContact(hit.x, hit.y, hit.z); // freed water/lava may now touch
   const c = avgColors[hit.id] || [0.5, 0.5, 0.5];
   particles.burst(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, c, 14, 3.2);
   sfx.break();
@@ -1259,7 +1468,7 @@ function useHeld() {
     if (hit.id === B.CRAFTING_TABLE) { placingHeld = false; openInventory('table'); return; }
     if (hit.id === B.FURNACE) {
       placingHeld = false;
-      openInventory('furnace', furnaces.key(hit.x, hit.y, hit.z));
+      openInventory('furnace', dimPrefix() + furnaces.key(hit.x, hit.y, hit.z));
       return;
     }
   }
@@ -1305,6 +1514,17 @@ function useHeld() {
       world.setBlock(px, py, pz, it.liquid === 'lava' ? B.LAVA : B.WATER);
       consumeHeld(I.BUCKET);
       sfx.splash();
+      liquidContact(px, py, pz); // water + lava -> obsidian
+    }
+  } else if (it.kind === 'lighter') {
+    if (!hit) return;
+    swingT = 0;
+    const lx = hit.x + hit.face[0], ly = hit.y + hit.face[1], lz = hit.z + hit.face[2];
+    if (tryLightPortal(lx, ly, lz)) {
+      sfx.portal();
+      toast('The portal roars to life!', 2.5);
+    } else {
+      toast('Nothing to light — needs a sealed obsidian frame (2×3 inside)', 2);
     }
   }
 }
@@ -1325,7 +1545,22 @@ const skySunset = new THREE.Color(0xe87a3f);
 const skyColor = new THREE.Color();
 let daylight = 1;
 
+const netherSky = new THREE.Color(0x1c0808);
+
 function updateDayNight(dt) {
+  if (world.dim === 'nether') {
+    scene.background = netherSky;
+    scene.fog.color.copy(netherSky);
+    ambient.intensity = 0.55;
+    sun.intensity = 0.12;
+    sunMesh.visible = false;
+    moonMesh.visible = false;
+    starMat.opacity = 0;
+    daylight = 0.4; // constant gloom; no day/night in the nether
+    return;
+  }
+  sunMesh.visible = true;
+  moonMesh.visible = true;
   timeOfDay = (timeOfDay + dt / DAY_LEN) % 1;
   const a = timeOfDay * Math.PI * 2; // 0 = dawn, PI/2 = noon
   const sinA = Math.sin(a);
@@ -1361,9 +1596,14 @@ function save() {
   if (wipeSave) return; // world was just deleted via New World
   try {
     const edits = [];
-    for (const [ck, m] of world.edits) edits.push([ck, [...m]]);
+    for (const [ck, m] of worldOver.edits) edits.push([ck, [...m]]);
+    const editsN = [];
+    for (const [ck, m] of worldNether.edits) editsN.push([ck, [...m]]);
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      seed: world.seed,
+      seed: worldOver.seed,
+      dim,
+      editsN,
+      portals: { overworld: dims.overworld.portals, nether: dims.nether.portals },
       timeOfDay,
       player: { pos: player.pos, yaw: player.yaw, pitch: player.pitch, hp: player.hp, hunger: player.hunger, saturation: player.saturation, sel: selected },
       inventory: inventory.serialize(),
@@ -1464,14 +1704,29 @@ function frame(dt) {
   // burning vignette
   fireOverlayEl.style.opacity = (player.inLava || player.burnT > 0) && !player.dead ? 0.75 : 0;
 
-  // underwater overlay + fog
+  // underwater overlay + fog (nether has its own closer fog)
   if (player.eyeInWater) {
     underwaterEl.style.opacity = 0.35;
     scene.fog.near = 2; scene.fog.far = 18;
   } else {
     underwaterEl.style.opacity = 0;
-    scene.fog.near = renderDist * CHUNK * 0.55;
-    scene.fog.far = renderDist * CHUNK * 0.95;
+    scene.fog.near = world.dim === 'nether' ? 10 : renderDist * CHUNK * 0.55;
+    scene.fog.far = renderDist * CHUNK * (world.dim === 'nether' ? 0.75 : 0.95);
+  }
+
+  // stand in a portal to travel
+  if ((started || forceStarted) && !paused && !player.dead) {
+    inPortalNow = world.getBlock(Math.floor(player.pos.x), Math.floor(player.pos.y + 0.5), Math.floor(player.pos.z)) === B.PORTAL;
+    portalCd -= dt;
+    if (inPortalNow && portalCd <= 0) {
+      portalT += dt;
+      if (portalT >= 2) switchDimension(dim === 'nether' ? 'overworld' : 'nether');
+    } else if (!inPortalNow) {
+      portalT = Math.max(0, portalT - dt * 3);
+    }
+    portalOverlayEl.style.opacity = inPortalNow && portalCd <= 0 ? Math.min(0.85, 0.3 + (portalT / 2) * 0.55) : 0;
+  } else if (player.dead) {
+    portalOverlayEl.style.opacity = 0;
   }
 
   // toast fade
@@ -1533,6 +1788,8 @@ window.__game = {
     else inventory.leftClick(area, idx);
   },
   suppressSave: () => { wipeSave = true; },
+  getDim: () => dim,
+  switchDimension, setDimension, tryLightPortal, dims,
   state: () => ({ breakingHeld, placingHeld, mining: mining && { ...mining }, invOpen, locked, forceStarted, punchCd }),
   setBreaking: (v) => { breakingHeld = v; },
   step: (dt = 0.05, n = 1) => { for (let i = 0; i < n; i++) frame(dt); },

@@ -15,6 +15,8 @@ A 3D Minecraft clone that runs entirely in the browser. No build step, no depend
 - **Furnaces & smelting** — craft a furnace (8 cobblestone), fuel it with coal/charcoal/wood, and smelt raw iron → ingots, sand → glass, cobblestone → stone, logs → charcoal; furnaces keep burning while you play
 - **Buckets** — scoop and pour water and lava (lava lakes lurk in the deepest caves — it burns, but it's also a 100-smelt fuel)
 - **Armor** — craft iron and diamond armor sets; equip them in dedicated slots to reduce combat and burn damage
+- **Obsidian & nether portals** — pour water on lava to make obsidian (diamond pickaxe to mine), build a portal frame, light it with flint and steel (iron + coal), and step through
+- **The Nether** — a cavernous netherrack dimension with a lava ocean and **blazes** that hover and hurl fireballs; distance scales 1:8, and blaze rods make great furnace fuel
 - **Day/night cycle** — moving sun and moon, stars, sunsets, and fog that matches the sky
 - **Survival elements** — health, fall damage, zombie attacks with knockback, death & respawn
 - **Minecraft Java physics** — fixed 20-tick simulation with authentic per-tick gravity/friction formulas, 1.25-block floaty jumps, sprinting (double-tap W), sneaking with edge protection, slippery ice, view bobbing, and Minecraft's mouse sensitivity curve (adjustable on the pause screen)

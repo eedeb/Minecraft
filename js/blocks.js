@@ -6,7 +6,7 @@ export const B = {
   AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, COBBLE: 4, PLANK: 5, LOG: 6, LEAVES: 7,
   SAND: 8, GLASS: 9, WATER: 10, SNOW: 11, BEDROCK: 12, COAL_ORE: 13, IRON_ORE: 14, DIAMOND_ORE: 15,
   WOOL: 16, CRAFTING_TABLE: 17, STONE_BRICK: 18, IRON_BLOCK: 19, DIAMOND_BLOCK: 20,
-  ICE: 21, FURNACE: 22, LAVA: 23,
+  ICE: 21, FURNACE: 22, LAVA: 23, OBSIDIAN: 24, PORTAL: 25, NETHERRACK: 26,
 };
 
 export const TILE = {
@@ -15,6 +15,7 @@ export const TILE = {
   COAL: 15, IRON: 16, DIAMOND: 17, WOOL: 18,
   CRAFTING_TOP: 19, CRAFTING_SIDE: 20, STONE_BRICK: 21, IRON_BLOCK: 22, DIAMOND_BLOCK: 23,
   ICE: 24, FURNACE_FRONT: 25, FURNACE_TOP: 26, LAVA: 27,
+  OBSIDIAN: 28, PORTAL: 29, NETHERRACK: 30,
 };
 
 // def: {name, top, bottom, side (tile ids), solid (collision), opaque (face culling), breakable}
@@ -46,6 +47,9 @@ def(B.DIAMOND_BLOCK, 'Diamond Block', TILE.DIAMOND_BLOCK, TILE.DIAMOND_BLOCK, TI
 def(B.ICE, 'Ice', TILE.ICE, TILE.ICE, TILE.ICE, { slip: 0.98 });
 def(B.FURNACE, 'Furnace', TILE.FURNACE_TOP, TILE.FURNACE_TOP, TILE.FURNACE_FRONT);
 def(B.LAVA, 'Lava', TILE.LAVA, TILE.LAVA, TILE.LAVA, { solid: false, opaque: false, breakable: false });
+def(B.OBSIDIAN, 'Obsidian', TILE.OBSIDIAN, TILE.OBSIDIAN, TILE.OBSIDIAN);
+def(B.PORTAL, 'Nether Portal', TILE.PORTAL, TILE.PORTAL, TILE.PORTAL, { solid: false, opaque: false, breakable: false });
+def(B.NETHERRACK, 'Netherrack', TILE.NETHERRACK, TILE.NETHERRACK, TILE.NETHERRACK);
 
 export const isSolid = (id) => !!(BLOCKS[id] && BLOCKS[id].solid);
 export const isOpaque = (id) => !!(BLOCKS[id] && BLOCKS[id].opaque);
@@ -170,6 +174,20 @@ export function buildAtlas() {
     [TILE.LAVA]: (x, y) => {
       if ((x * 3 + y * 5 + ((x * y) % 4)) % 11 < 3) return [...jitter([250, 190, 45], 15), 255];
       return [...jitter([228, 105, 20], 20), 255];
+    },
+    [TILE.OBSIDIAN]: () => {
+      if (rand() < 0.09) return [...jitter([74, 44, 116], 12), 255];
+      return [...jitter([24, 18, 34], 7), 255];
+    },
+    [TILE.PORTAL]: (x, y) => {
+      if ((x * 2 + y * 3 + ((x + y) % 5)) % 9 < 2) return [...jitter([190, 100, 245], 20), 255];
+      return [...jitter([98, 32, 165], 22), 255];
+    },
+    [TILE.NETHERRACK]: () => {
+      const r = rand();
+      if (r < 0.14) return [...jitter([66, 20, 20], 10), 255];
+      if (r < 0.22) return [...jitter([152, 72, 60], 12), 255];
+      return [...jitter([108, 40, 38], 14), 255];
     },
   };
   const oreP = (tile) => (x, y) => {

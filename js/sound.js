@@ -35,4 +35,6 @@ export const sfx = {
   eat: () => { tone('square', 90, 60, 0.09, 0.1); setTimeout(() => tone('square', 80, 55, 0.09, 0.1), 120); },
   craft: () => tone('square', 300, 500, 0.1, 0.1),
   mine: () => tone('square', 140 + Math.random() * 50, 100, 0.04, 0.05),
+  fireball: () => tone('sawtooth', 900, 200, 0.3, 0.1),
+  portal: () => { tone('sine', 120, 480, 0.8, 0.15); setTimeout(() => tone('sine', 480, 90, 0.6, 0.12), 300); },
 };
