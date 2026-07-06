@@ -6,7 +6,7 @@ export const B = {
   AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, COBBLE: 4, PLANK: 5, LOG: 6, LEAVES: 7,
   SAND: 8, GLASS: 9, WATER: 10, SNOW: 11, BEDROCK: 12, COAL_ORE: 13, IRON_ORE: 14, DIAMOND_ORE: 15,
   WOOL: 16, CRAFTING_TABLE: 17, STONE_BRICK: 18, IRON_BLOCK: 19, DIAMOND_BLOCK: 20,
-  ICE: 21,
+  ICE: 21, FURNACE: 22, LAVA: 23,
 };
 
 export const TILE = {
@@ -14,7 +14,7 @@ export const TILE = {
   LEAVES: 8, SAND: 9, GLASS: 10, WATER: 11, SNOW: 12, SNOW_SIDE: 13, BEDROCK: 14,
   COAL: 15, IRON: 16, DIAMOND: 17, WOOL: 18,
   CRAFTING_TOP: 19, CRAFTING_SIDE: 20, STONE_BRICK: 21, IRON_BLOCK: 22, DIAMOND_BLOCK: 23,
-  ICE: 24,
+  ICE: 24, FURNACE_FRONT: 25, FURNACE_TOP: 26, LAVA: 27,
 };
 
 // def: {name, top, bottom, side (tile ids), solid (collision), opaque (face culling), breakable}
@@ -44,6 +44,8 @@ def(B.STONE_BRICK, 'Stone Bricks', TILE.STONE_BRICK, TILE.STONE_BRICK, TILE.STON
 def(B.IRON_BLOCK, 'Iron Block', TILE.IRON_BLOCK, TILE.IRON_BLOCK, TILE.IRON_BLOCK);
 def(B.DIAMOND_BLOCK, 'Diamond Block', TILE.DIAMOND_BLOCK, TILE.DIAMOND_BLOCK, TILE.DIAMOND_BLOCK);
 def(B.ICE, 'Ice', TILE.ICE, TILE.ICE, TILE.ICE, { slip: 0.98 });
+def(B.FURNACE, 'Furnace', TILE.FURNACE_TOP, TILE.FURNACE_TOP, TILE.FURNACE_FRONT);
+def(B.LAVA, 'Lava', TILE.LAVA, TILE.LAVA, TILE.LAVA, { solid: false, opaque: false, breakable: false });
 
 export const isSolid = (id) => !!(BLOCKS[id] && BLOCKS[id].solid);
 export const isOpaque = (id) => !!(BLOCKS[id] && BLOCKS[id].opaque);
@@ -152,6 +154,22 @@ export function buildAtlas() {
       const d = (x - y + 32) % 7;
       if (d === 0 && rand() < 0.6) return [...jitter([225, 240, 252], 5), 255];
       return [...jitter([155, 195, 232], 8), 255];
+    },
+    [TILE.FURNACE_TOP]: (x, y) => {
+      if (x === 0 || y === 0 || x === 15 || y === 15) return [...jitter([70, 70, 72], 6), 255];
+      return [...jitter([112, 112, 115], 8), 255];
+    },
+    [TILE.FURNACE_FRONT]: (x, y) => {
+      if (x === 0 || y === 0 || x === 15 || y === 15) return [...jitter([70, 70, 72], 6), 255];
+      if (x >= 4 && x <= 11 && y >= 8 && y <= 13) {
+        if (rand() < 0.3 && y >= 10) return [...jitter([235, 120, 30], 20), 255];
+        return [...jitter([28, 26, 24], 8), 255];
+      }
+      return [...jitter([112, 112, 115], 8), 255];
+    },
+    [TILE.LAVA]: (x, y) => {
+      if ((x * 3 + y * 5 + ((x * y) % 4)) % 11 < 3) return [...jitter([250, 190, 45], 15), 255];
+      return [...jitter([228, 105, 20], 20), 255];
     },
   };
   const oreP = (tile) => (x, y) => {

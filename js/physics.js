@@ -79,6 +79,10 @@ export function isWaterAt(world, x, y, z) {
   return world.getBlock(Math.floor(x), Math.floor(y), Math.floor(z)) === B.WATER;
 }
 
+export function isLavaAt(world, x, y, z) {
+  return world.getBlock(Math.floor(x), Math.floor(y), Math.floor(z)) === B.LAVA;
+}
+
 // Does block cell (bx,by,bz) overlap entity's AABB?
 export function blockOverlapsEntity(bx, by, bz, e) {
   return bx + 1 > e.pos.x - e.half && bx < e.pos.x + e.half &&

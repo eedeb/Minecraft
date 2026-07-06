@@ -2,7 +2,7 @@
 // spawn at night, chase the player, and burn in daylight.
 
 import * as THREE from 'three';
-import { moveEntity, isWaterAt, rayVsEntity } from './physics.js';
+import { moveEntity, isWaterAt, isLavaAt, rayVsEntity } from './physics.js';
 import { B } from './blocks.js';
 import { I } from './items.js';
 
@@ -172,7 +172,7 @@ export class Mob {
         const dy = Math.abs((player.pos.y) - this.pos.y);
         if (dist < 1.6 && dy < 2 && this.attackCd <= 0) {
           this.attackCd = 1.1;
-          player.damage(3, time);
+          player.damage(3, time, 'attack');
           // knock the player back
           const kx = dx / (dist || 1), kz = dz / (dist || 1);
           player.vel.x += kx * 7;
@@ -212,6 +212,14 @@ export class Mob {
       this.jumpCd = 0.5;
     }
     if (this.pos.y < -20) this.dead = true;
+
+    // mobs burn in lava
+    if (isLavaAt(world, this.pos.x, this.pos.y + 0.2, this.pos.z)) {
+      this.hp -= 4 * dt;
+      this.flashT = 0.15;
+      this.burnT = 1;
+      if (this.hp <= 0) this.dead = true;
+    }
 
     // --- animation ---
     const hspeed = Math.hypot(this.vel.x, this.vel.z);

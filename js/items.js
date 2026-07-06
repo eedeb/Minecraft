@@ -11,7 +11,14 @@ export const I = {
   WOOD_AXE: 114, STONE_AXE: 115, IRON_AXE: 116, DIAMOND_AXE: 117,
   WOOD_SHOVEL: 118, STONE_SHOVEL: 119, IRON_SHOVEL: 120, DIAMOND_SHOVEL: 121,
   WOOD_SWORD: 122, STONE_SWORD: 123, IRON_SWORD: 124, DIAMOND_SWORD: 125,
+  RAW_IRON: 126, CHARCOAL: 127,
+  COOKED_PORKCHOP: 128, STEAK: 129, COOKED_MUTTON: 130,
+  BUCKET: 131, WATER_BUCKET: 132, LAVA_BUCKET: 133,
+  IRON_HELMET: 134, IRON_CHEST: 135, IRON_LEGS: 136, IRON_BOOTS: 137,
+  DIAMOND_HELMET: 138, DIAMOND_CHEST: 139, DIAMOND_LEGS: 140, DIAMOND_BOOTS: 141,
 };
+
+export const ARMOR_SLOTS = ['head', 'chest', 'legs', 'feet'];
 
 export const TIER_NAMES = ['', 'wooden', 'stone', 'iron', 'diamond'];
 
@@ -29,11 +36,36 @@ ITEMS[I.STICK] = mat('Stick', 'material');
 ITEMS[I.COAL] = mat('Coal', 'material');
 ITEMS[I.IRON_INGOT] = mat('Iron Ingot', 'material');
 ITEMS[I.DIAMOND] = mat('Diamond', 'material');
-ITEMS[I.APPLE] = mat('Apple', 'food', { heal: 4 });
-ITEMS[I.PORKCHOP] = mat('Porkchop', 'food', { heal: 8 });
-ITEMS[I.BEEF] = mat('Beef', 'food', { heal: 8 });
-ITEMS[I.MUTTON] = mat('Mutton', 'food', { heal: 6 });
-ITEMS[I.FLESH] = mat('Rotten Flesh', 'food', { heal: 2 });
+ITEMS[I.RAW_IRON] = mat('Raw Iron', 'material');
+ITEMS[I.CHARCOAL] = mat('Charcoal', 'material');
+// food: hunger points restored + saturation
+ITEMS[I.APPLE] = mat('Apple', 'food', { hunger: 4, sat: 2.4 });
+ITEMS[I.PORKCHOP] = mat('Raw Porkchop', 'food', { hunger: 3, sat: 1.8 });
+ITEMS[I.BEEF] = mat('Raw Beef', 'food', { hunger: 3, sat: 1.8 });
+ITEMS[I.MUTTON] = mat('Raw Mutton', 'food', { hunger: 2, sat: 1.2 });
+ITEMS[I.FLESH] = mat('Rotten Flesh', 'food', { hunger: 4, sat: 0.8 });
+ITEMS[I.COOKED_PORKCHOP] = mat('Cooked Porkchop', 'food', { hunger: 8, sat: 12.8 });
+ITEMS[I.STEAK] = mat('Steak', 'food', { hunger: 8, sat: 12.8 });
+ITEMS[I.COOKED_MUTTON] = mat('Cooked Mutton', 'food', { hunger: 6, sat: 9.6 });
+ITEMS[I.BUCKET] = mat('Bucket', 'bucket', { liquid: null, stack: 1 });
+ITEMS[I.WATER_BUCKET] = mat('Water Bucket', 'bucket', { liquid: 'water', stack: 1 });
+ITEMS[I.LAVA_BUCKET] = mat('Lava Bucket', 'bucket', { liquid: 'lava', stack: 1 });
+// armor: slot + defense points (reduction = points * 4%, capped 80%)
+{
+  const armorDefs = { iron: { label: 'Iron', def: [2, 6, 5, 2] }, diamond: { label: 'Diamond', def: [3, 8, 6, 3] } };
+  const pieces = ['Helmet', 'Chestplate', 'Leggings', 'Boots'];
+  const ids = {
+    iron: [I.IRON_HELMET, I.IRON_CHEST, I.IRON_LEGS, I.IRON_BOOTS],
+    diamond: [I.DIAMOND_HELMET, I.DIAMOND_CHEST, I.DIAMOND_LEGS, I.DIAMOND_BOOTS],
+  };
+  for (const m of ['iron', 'diamond']) {
+    pieces.forEach((p, i) => {
+      ITEMS[ids[m][i]] = mat(`${armorDefs[m].label} ${p}`, 'armor', {
+        slot: ARMOR_SLOTS[i], defense: armorDefs[m].def[i], matKey: m, stack: 1,
+      });
+    });
+  }
+}
 
 const MATS = {
   wood: { tier: 1, mult: 4, damage: 4, m: '#9e7145', d: '#77542f' },
@@ -75,6 +107,32 @@ export function maxStack(id) {
 }
 
 // ---------------------------------------------------------------------------
+// Smelting: input item -> output item. One smelt takes SMELT_TIME seconds.
+
+export const SMELT_TIME = 10;
+
+export const SMELTING = {
+  [I.RAW_IRON]: I.IRON_INGOT,
+  [B.SAND]: B.GLASS,
+  [B.COBBLE]: B.STONE,
+  [B.LOG]: I.CHARCOAL,
+  [I.PORKCHOP]: I.COOKED_PORKCHOP,
+  [I.BEEF]: I.STEAK,
+  [I.MUTTON]: I.COOKED_MUTTON,
+};
+
+// Fuel burn time in seconds (coal = 8 smelts, like Minecraft).
+export const FUEL = {
+  [I.COAL]: 80,
+  [I.CHARCOAL]: 80,
+  [B.LOG]: 15,
+  [B.PLANK]: 15,
+  [B.CRAFTING_TABLE]: 15,
+  [I.STICK]: 5,
+  [I.LAVA_BUCKET]: 1000,
+};
+
+// ---------------------------------------------------------------------------
 // Mining rules. hand = seconds to break bare-handed. tier = minimum tool tier
 // required for the block to DROP anything. drop(rand) -> [itemId, count] | null.
 
@@ -86,8 +144,9 @@ export const MINING = {
   [B.STONE]: { hand: 7.5, tool: 'pickaxe', tier: 1, drop: () => [B.COBBLE, 1] },
   [B.COBBLE]: { hand: 10, tool: 'pickaxe', tier: 1, drop: () => [B.COBBLE, 1] },
   [B.COAL_ORE]: { hand: 15, tool: 'pickaxe', tier: 1, drop: () => [I.COAL, 1] },
-  [B.IRON_ORE]: { hand: 15, tool: 'pickaxe', tier: 2, drop: () => [I.IRON_INGOT, 1] },
+  [B.IRON_ORE]: { hand: 15, tool: 'pickaxe', tier: 2, drop: () => [I.RAW_IRON, 1] },
   [B.DIAMOND_ORE]: { hand: 15, tool: 'pickaxe', tier: 3, drop: () => [I.DIAMOND, 1] },
+  [B.FURNACE]: { hand: 10, tool: 'pickaxe', tier: 1, drop: () => [B.FURNACE, 1] },
   [B.LOG]: { hand: 3, tool: 'axe', tier: 0, drop: () => [B.LOG, 1] },
   [B.PLANK]: { hand: 3, tool: 'axe', tier: 0, drop: () => [B.PLANK, 1] },
   [B.LEAVES]: { hand: 0.35, tool: null, tier: 0, drop: (r) => r < 0.08 ? [I.APPLE, 1] : null },
@@ -149,13 +208,28 @@ const toolRecipes = [];
   });
 }
 
+const armorRecipes = [];
+{
+  const mats = { iron: I.IRON_INGOT, diamond: I.DIAMOND };
+  const ids = {
+    iron: [I.IRON_HELMET, I.IRON_CHEST, I.IRON_LEGS, I.IRON_BOOTS],
+    diamond: [I.DIAMOND_HELMET, I.DIAMOND_CHEST, I.DIAMOND_LEGS, I.DIAMOND_BOOTS],
+  };
+  const shapes = [['MMM', 'M.M'], ['M.M', 'MMM', 'MMM'], ['MMM', 'M.M', 'M.M'], ['M.M', 'M.M']];
+  for (const m of ['iron', 'diamond']) {
+    shapes.forEach((sh, i) => armorRecipes.push(shaped(ids[m][i], 1, sh, { M: mats[m] })));
+  }
+}
+
 export const RECIPES = [
   shaped(B.PLANK, 4, ['L'], { L: B.LOG }),
   shaped(I.STICK, 4, ['P', 'P'], { P: B.PLANK }),
   shaped(B.CRAFTING_TABLE, 1, ['PP', 'PP'], { P: B.PLANK }),
+  shaped(B.FURNACE, 1, ['CCC', 'C.C', 'CCC'], { C: B.COBBLE }),
   ...toolRecipes,
-  shaped(B.STONE_BRICK, 4, ['CC', 'CC'], { C: B.COBBLE }),
-  shapeless(B.GLASS, 1, [B.SAND, I.COAL]),
+  shaped(I.BUCKET, 1, ['I.I', '.I.'], { I: I.IRON_INGOT }),
+  ...armorRecipes,
+  shaped(B.STONE_BRICK, 4, ['SS', 'SS'], { S: B.STONE }),
   shaped(B.IRON_BLOCK, 1, ['III', 'III', 'III'], { I: I.IRON_INGOT }),
   shapeless(I.IRON_INGOT, 9, [B.IRON_BLOCK]),
   shaped(B.DIAMOND_BLOCK, 1, ['DDD', 'DDD', 'DDD'], { D: I.DIAMOND }),
@@ -321,6 +395,71 @@ const ITEM_STENCILS = {
   [I.BEEF]: { rows: MEAT, pal: { p: '#9e4a3a', P: '#c96f5b', w: '#efe6d6' } },
   [I.MUTTON]: { rows: MEAT, pal: { p: '#d67e6e', P: '#eba99c', w: '#efe6d6' } },
   [I.FLESH]: { rows: MEAT, pal: { p: '#7a8a4a', P: '#9aa86a', w: '#5a6a3a' } },
+  [I.COOKED_PORKCHOP]: { rows: MEAT, pal: { p: '#d98850', P: '#f0b070', w: '#efe6d6' } },
+  [I.STEAK]: { rows: MEAT, pal: { p: '#8a4a2a', P: '#b06a40', w: '#efe6d6' } },
+  [I.COOKED_MUTTON]: { rows: MEAT, pal: { p: '#c07038', P: '#e09858', w: '#efe6d6' } },
+  [I.RAW_IRON]: {
+    rows: [
+      '............', '............', '...mmmm.....', '..mmmdmm....',
+      '.mmlmmmmm...', '.mmmmmdmm...', '.mlmmmmmm...', '..mmmmmm....',
+      '...mmmm.....', '............', '............', '............',
+    ],
+    pal: { m: '#dcae8e', d: '#b58465', l: '#f2d2ba' },
+  },
+  [I.CHARCOAL]: {
+    rows: [
+      '............', '............', '...cccc.....', '..cccccc....',
+      '.ccclcccc...', '.cccccccc...', '.ccccccdc...', '..cccccc....',
+      '...cccc.....', '............', '............', '............',
+    ],
+    pal: { c: '#3a3028', l: '#5c5044', d: '#241d16' },
+  },
+};
+
+const BUCKET_ROWS = [
+  '............',
+  '...h....h...',
+  '....h..h....',
+  '....hhhh....',
+  '...LLLLLL...',
+  '..mLLLLLLm..',
+  '..dmmmmmmd..',
+  '...dmmmmd...',
+  '...dmmmmd...',
+  '....dmmd....',
+  '....dddd....',
+  '............',
+];
+const BUCKET_PAL = { m: '#c8c8cc', d: '#8e8e94', h: '#a0a0a6' };
+ITEM_STENCILS[I.BUCKET] = { rows: BUCKET_ROWS, pal: { ...BUCKET_PAL, L: '#c8c8cc' } };
+ITEM_STENCILS[I.WATER_BUCKET] = { rows: BUCKET_ROWS, pal: { ...BUCKET_PAL, L: '#3d6fd9' } };
+ITEM_STENCILS[I.LAVA_BUCKET] = { rows: BUCKET_ROWS, pal: { ...BUCKET_PAL, L: '#e8702a' } };
+
+const ARMOR_STENCILS = {
+  head: [
+    '............', '............', '...dmmmmd...', '..dmmmmmmd..',
+    '..mmmmmmmm..', '..mmmmmmmm..', '..mm....mm..', '..mm....mm..',
+    '............', '............', '............', '............',
+  ],
+  chest: [
+    '............', '.mm......mm.', '.mmm....mmm.', '.mmmmmmmmmm.',
+    '..mmmmmmmm..', '..mmmmmmmm..', '..mmmmmmmm..', '..mmmmmmmm..',
+    '..dmmmmmmd..', '............', '............', '............',
+  ],
+  legs: [
+    '............', '..mmmmmmmm..', '..mmmmmmmm..', '..mm.dd.mm..',
+    '..mm....mm..', '..mm....mm..', '..mm....mm..', '..mm....mm..',
+    '..dd....dd..', '............', '............', '............',
+  ],
+  feet: [
+    '............', '............', '............', '..mm....mm..',
+    '..mm....mm..', '..mm....mm..', '.dmmm..dmmm.', '.mmmm..mmmm.',
+    '.dddd..dddd.', '............', '............', '............',
+  ],
+};
+const ARMOR_COLORS = {
+  iron: { m: '#d8d8d8', d: '#9a9a9a' },
+  diamond: { m: '#4adfd9', d: '#2fb3ae' },
 };
 
 const iconCache = new Map();
@@ -353,6 +492,8 @@ export function itemIcon(id) {
   } else if (it && it.kind === 'tool') {
     const m = MATS[it.matKey];
     drawStencil(ctx, TOOL_STENCILS[it.toolType], { m: m.m, d: m.d, h: '#8a5d2e', g: '#5a5a5a' });
+  } else if (it && it.kind === 'armor') {
+    drawStencil(ctx, ARMOR_STENCILS[it.slot], ARMOR_COLORS[it.matKey]);
   } else if (ITEM_STENCILS[id]) {
     drawStencil(ctx, ITEM_STENCILS[id].rows, ITEM_STENCILS[id].pal);
   }

@@ -93,7 +93,7 @@ export class World {
           } else if (y <= h) {
             const carveOK = y > 2 && (h >= SEA + 2 ? true : y < h - 4);
             if (carveOK && this.caveAt(wx, y, wz)) {
-              id = B.AIR;
+              id = y <= 11 ? B.LAVA : B.AIR; // lava lakes in the deepest caves
             } else if (y < h - 3) {
               id = B.STONE;
               const r = hash3(wx, y, wz, this.seed ^ 0x51ab);
@@ -224,6 +224,7 @@ export class World {
     const baseX = cx * CHUNK, baseZ = cz * CHUNK;
     const opq = { pos: [], nor: [], uv: [], col: [], idx: [] };
     const wat = { pos: [], nor: [], uv: [], idx: [] };
+    const lav = { pos: [], nor: [], uv: [], idx: [] };
 
     const get = (lx, y, lz) => {
       if (y < 0) return B.BEDROCK;
@@ -241,15 +242,16 @@ export class World {
           if (id === B.AIR) continue;
           const blk = BLOCKS[id];
           const water = id === B.WATER;
+          const lava = id === B.LAVA;
 
           for (const f of FACES) {
             const nb = get(lx + f.dir[0], y + f.dir[1], lz + f.dir[2]);
             if (isOpaque(nb)) continue;
-            if (nb === id && (water || id === B.GLASS)) continue;
+            if (nb === id && (water || lava || id === B.GLASS)) continue;
 
             const tile = f.dir[1] === 1 ? blk.top : f.dir[1] === -1 ? blk.bottom : blk.side;
             const r = tileUV(tile);
-            const buf = water ? wat : opq;
+            const buf = water ? wat : lava ? lav : opq;
             const base = buf.pos.length / 3;
 
             // AO axes
@@ -264,7 +266,7 @@ export class World {
               buf.pos.push(lx + corner[0], y + corner[1], lz + corner[2]);
               buf.nor.push(f.dir[0], f.dir[1], f.dir[2]);
               buf.uv.push(corner[3] ? r.u1 : r.u0, corner[4] ? r.v1 : r.v0);
-              if (!water) {
+              if (!water && !lava) {
                 const s1o = [...front], s2o = [...front], co = [...front];
                 const sg1 = corner[t1] ? 1 : -1, sg2 = corner[t2] ? 1 : -1;
                 s1o[t1] += sg1; s2o[t2] += sg2; co[t1] += sg1; co[t2] += sg2;
@@ -277,7 +279,7 @@ export class World {
                 opq.col.push(l, l, l);
               }
             }
-            if (water) {
+            if (water || lava) {
               buf.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
             } else if (ao[0] + ao[2] > ao[1] + ao[3]) {
               buf.idx.push(base + 1, base + 2, base + 3, base + 1, base + 3, base);
@@ -300,13 +302,13 @@ export class World {
       g.computeBoundingSphere();
       return g;
     };
-    return { opaque: makeGeo(opq, true), water: makeGeo(wat, false) };
+    return { opaque: makeGeo(opq, true), water: makeGeo(wat, false), lava: makeGeo(lav, false) };
   }
 
   buildMesh(cx, cz) {
     const c = this.ensureData(cx, cz);
     this.disposeMeshes(c);
-    const { opaque, water } = this.buildChunkGeometry(c);
+    const { opaque, water, lava } = this.buildChunkGeometry(c);
     if (opaque) {
       c.meshO = new THREE.Mesh(opaque, this.materials.opaque);
       c.meshO.position.set(cx * CHUNK, 0, cz * CHUNK);
@@ -318,12 +320,18 @@ export class World {
       c.meshW.renderOrder = 1;
       this.scene.add(c.meshW);
     }
+    if (lava) {
+      c.meshL = new THREE.Mesh(lava, this.materials.lava);
+      c.meshL.position.set(cx * CHUNK, 0, cz * CHUNK);
+      this.scene.add(c.meshL);
+    }
     c.hasMesh = true;
   }
 
   disposeMeshes(c) {
     if (c.meshO) { this.scene.remove(c.meshO); c.meshO.geometry.dispose(); c.meshO = null; }
     if (c.meshW) { this.scene.remove(c.meshW); c.meshW.geometry.dispose(); c.meshW = null; }
+    if (c.meshL) { this.scene.remove(c.meshL); c.meshL.geometry.dispose(); c.meshL = null; }
     c.hasMesh = false;
   }
 

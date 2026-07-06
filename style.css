@@ -48,14 +48,38 @@ html, body {
 }
 
 #hearts {
-  position: absolute; bottom: 68px; left: 50%;
-  transform: translateX(-50%);
-  font-size: 21px; letter-spacing: 2px;
+  position: absolute; bottom: 68px; left: calc(50% - 222px);
+  font-size: 20px; letter-spacing: 1px;
   text-shadow: 1px 1px 0 #000;
+  white-space: nowrap;
 }
 #hearts .full { color: #e02020; }
 #hearts .half { color: #e08080; }
 #hearts .empty { color: #3a3a3a; }
+
+#hunger {
+  position: absolute; bottom: 68px; left: calc(50% + 222px);
+  transform: translateX(-100%);
+  font-size: 18px; letter-spacing: 1px;
+  text-shadow: 1px 1px 0 #000;
+  white-space: nowrap;
+}
+#hunger .full { filter: none; }
+#hunger .half { filter: saturate(0.4) brightness(0.75); }
+#hunger .empty { filter: grayscale(1) brightness(0.35); }
+
+#armorbar {
+  position: absolute; bottom: 94px; left: calc(50% - 222px);
+  font-size: 15px; letter-spacing: 1px;
+  text-shadow: 1px 1px 0 #000;
+}
+#armorbar .empty { filter: grayscale(1) brightness(0.4); }
+
+#fireOverlay {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 100%, rgba(255,120,20,0.55) 0%, rgba(200,60,0,0.15) 55%, rgba(0,0,0,0) 75%);
+  opacity: 0; transition: opacity 0.25s;
+}
 
 #blockname {
   position: absolute; bottom: 110px; left: 50%;
@@ -224,6 +248,39 @@ html, body {
 .inv-slot.out.disabled { opacity: 0.4; cursor: default; }
 .inv-slot.out.empty { opacity: 0.3; cursor: default; }
 .tip-line { font-size: 11px; color: #9a9a9a; min-height: 16px; margin-bottom: 6px; }
+
+#armorRow { grid-template-columns: repeat(4, 42px); margin-bottom: 8px; }
+#armorRow .inv-slot.armor-empty::after {
+  content: attr(data-ph);
+  font-size: 9px; color: #666;
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+
+#furnacePanel { display: none; align-items: center; gap: 18px; margin: 6px 0 10px; }
+.furnace-col { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.flame {
+  width: 22px; height: 22px;
+  position: relative;
+  background: rgba(15,15,18,0.8);
+  border: 2px solid #555;
+}
+#flameFill {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(#ffd24a, #ff7a1a);
+  height: 0%;
+}
+.furnace-arrow {
+  width: 70px; height: 14px;
+  border: 2px solid #555;
+  position: relative;
+  background: rgba(15,15,18,0.8);
+}
+#progFill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: #9ad06a;
+  width: 0%;
+}
 .tip-line .cur { color: #ffd76e; }
 .tag-table {
   font-size: 9px; color: #d8b45a; border: 1px solid #7a6630;

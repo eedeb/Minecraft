@@ -3,7 +3,7 @@
 // stacks (2x2 mode uses cells 0,1,3,4), and a cursor stack held on the mouse.
 // Each slot is null or {id, n}.
 
-import { maxStack } from './items.js';
+import { ITEMS, maxStack, ARMOR_SLOTS, SMELTING, FUEL } from './items.js';
 
 const enc = (s) => (s ? [s.id, s.n] : null);
 const dec = (v) => (v && v[1] > 0 ? { id: +v[0], n: +v[1] } : null);
@@ -12,14 +12,40 @@ export class Inventory {
   constructor() {
     this.slots = new Array(36).fill(null); // 0-8 = hotbar, 9-35 = main
     this.craft = new Array(9).fill(null);  // 3x3 crafting grid
+    this.armor = new Array(4).fill(null);  // head, chest, legs, feet
     this.cursor = null;                    // stack "picked up" by the mouse
+    this.container = null;                 // open furnace state {slots:[in,fuel,out]}
     this.onChange = null;
   }
 
   _c() { if (this.onChange) this.onChange(); }
 
-  get(area, idx) { return (area === 'craft' ? this.craft : this.slots)[idx] || null; }
-  set(area, idx, s) { (area === 'craft' ? this.craft : this.slots)[idx] = (s && s.n > 0) ? s : null; }
+  _arr(area) {
+    if (area === 'craft') return this.craft;
+    if (area === 'armor') return this.armor;
+    if (area === 'furn') return this.container ? this.container.slots : null;
+    return this.slots;
+  }
+
+  get(area, idx) { const a = this._arr(area); return (a && a[idx]) || null; }
+  set(area, idx, s) { const a = this._arr(area); if (a) a[idx] = (s && s.n > 0) ? s : null; }
+
+  // slot placement rules: armor slots only accept matching pieces,
+  // furnace output (idx 2) is take-only
+  _accepts(area, idx, id) {
+    if (area === 'armor') {
+      const it = ITEMS[id];
+      return !!(it && it.kind === 'armor' && ARMOR_SLOTS.indexOf(it.slot) === idx);
+    }
+    if (area === 'furn' && idx === 2) return false;
+    return true;
+  }
+
+  armorPoints() {
+    let p = 0;
+    for (const s of this.armor) if (s) p += ITEMS[s.id].defense || 0;
+    return p;
+  }
 
   // total in main slots (not craft grid / cursor)
   count(id) {
@@ -86,6 +112,14 @@ export class Inventory {
     const s = this.get(area, idx);
     if (!this.cursor) {
       if (s) { this.cursor = s; this.set(area, idx, null); }
+    } else if (!this._accepts(area, idx, this.cursor.id)) {
+      // take-only / mismatched slot: allow merging OUT of it if ids match
+      if (s && s.id === this.cursor.id) {
+        const lim = maxStack(s.id);
+        const t = Math.min(s.n, lim - this.cursor.n);
+        this.cursor.n += t; s.n -= t;
+        if (!s.n) this.set(area, idx, null);
+      }
     } else if (!s) {
       this.set(area, idx, this.cursor);
       this.cursor = null;
@@ -112,6 +146,8 @@ export class Inventory {
         s.n -= t;
         if (!s.n) this.set(area, idx, null);
       }
+    } else if (!this._accepts(area, idx, this.cursor.id)) {
+      // no-op on take-only / mismatched slots
     } else if (!s) {
       this.set(area, idx, { id: this.cursor.id, n: 1 });
       this.cursor.n--;
@@ -153,14 +189,51 @@ export class Inventory {
     this._c();
   }
 
-  // Shift-click: craft grid -> inventory; hotbar <-> main.
+  // move a stack into one specific slot (merge or place); true if fully moved
+  _moveInto(fromArea, fromIdx, toArea, toIdx) {
+    const s = this.get(fromArea, fromIdx);
+    if (!s) return false;
+    const t = this.get(toArea, toIdx);
+    const lim = maxStack(s.id);
+    if (!t) {
+      this.set(toArea, toIdx, { id: s.id, n: s.n });
+      this.set(fromArea, fromIdx, null);
+      return true;
+    }
+    if (t.id === s.id && t.n < lim) {
+      const mv = Math.min(s.n, lim - t.n);
+      t.n += mv; s.n -= mv;
+      if (!s.n) { this.set(fromArea, fromIdx, null); return true; }
+    }
+    return false;
+  }
+
+  // Shift-click quick move: furnace routing > armor equip > hotbar <-> main.
   quickMove(area, idx) {
     const s = this.get(area, idx);
     if (!s) return;
     let targets;
-    if (area === 'craft') targets = [...Array(36).keys()];
-    else if (idx < 9) targets = Array.from({ length: 27 }, (_, i) => i + 9);
-    else targets = [...Array(9).keys()];
+    if (area !== 'inv') {
+      targets = [...Array(36).keys()]; // out of craft/armor/furnace -> inventory
+    } else {
+      // into an open furnace: smeltables to input, fuel to the fuel slot
+      if (this.container) {
+        if (SMELTING[s.id] !== undefined && this._moveInto('inv', idx, 'furn', 0)) { this._c(); return; }
+        if (FUEL[s.id] && this._moveInto('inv', idx, 'furn', 1)) { this._c(); return; }
+      }
+      // auto-equip armor
+      const it = ITEMS[s.id];
+      if (it && it.kind === 'armor') {
+        const ai = ARMOR_SLOTS.indexOf(it.slot);
+        if (ai !== -1 && !this.armor[ai]) {
+          this.armor[ai] = s;
+          this.set(area, idx, null);
+          this._c();
+          return;
+        }
+      }
+      targets = idx < 9 ? Array.from({ length: 27 }, (_, i) => i + 9) : [...Array(9).keys()];
+    }
     const lim = maxStack(s.id);
     for (const i of targets) {
       const t = this.slots[i];
@@ -204,15 +277,16 @@ export class Inventory {
   }
 
   serialize() {
-    return { v: 2, slots: this.slots.map(enc), craft: this.craft.map(enc), cursor: enc(this.cursor) };
+    return { v: 3, slots: this.slots.map(enc), craft: this.craft.map(enc), armor: this.armor.map(enc), cursor: enc(this.cursor) };
   }
 
   static from(data) {
     const inv = new Inventory();
     if (!data) return inv;
-    if (data.v === 2) {
+    if (data.v === 2 || data.v === 3) {
       (data.slots || []).slice(0, 36).forEach((v, i) => { inv.slots[i] = dec(v); });
       (data.craft || []).slice(0, 9).forEach((v, i) => { inv.craft[i] = dec(v); });
+      (data.armor || []).slice(0, 4).forEach((v, i) => { inv.armor[i] = dec(v); });
       inv.cursor = dec(data.cursor);
       return inv;
     }

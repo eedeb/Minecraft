@@ -28,11 +28,14 @@
   <div id="hud">
     <div id="crosshair"></div>
     <div id="hearts"></div>
+    <div id="hunger"></div>
+    <div id="armorbar"></div>
     <div id="hotbar"></div>
     <div id="blockname"></div>
     <div id="debug"></div>
     <div id="vignette-damage"></div>
     <div id="underwater"></div>
+    <div id="fireOverlay"></div>
   </div>
 
   <div id="overlay">
@@ -75,7 +78,17 @@
           <div class="craft-arrow">→</div>
           <div id="craftOut" class="inv-slot out empty"></div>
         </div>
-        <h2>Inventory</h2>
+        <div id="furnacePanel">
+          <div class="furnace-col">
+            <div id="furnIn"></div>
+            <div class="flame"><div id="flameFill"></div></div>
+            <div id="furnFuel"></div>
+          </div>
+          <div class="furnace-arrow"><div id="progFill"></div></div>
+          <div id="furnOut"></div>
+        </div>
+        <h2>Inventory <span class="tip" id="armorTip">armor →</span></h2>
+        <div id="armorRow" class="slot-grid"></div>
         <div id="invMain" class="slot-grid"></div>
         <div id="invHotbarRow" class="slot-grid hotbar-row"></div>
         <div class="tip-line" id="invTip">Drag to move · right-click splits · shift-click quick-moves · hover + 1–9 or Q</div>

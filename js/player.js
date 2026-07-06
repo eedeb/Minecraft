@@ -3,7 +3,7 @@
 // blocks/second externally, converted to blocks/tick inside the tick).
 // Rendering interpolates between the last two ticks.
 
-import { moveEntity, isWaterAt } from './physics.js';
+import { moveEntity, isWaterAt, isLavaAt } from './physics.js';
 import { BLOCKS } from './blocks.js';
 
 const TICK = 0.05;          // 20 ticks per second
@@ -41,6 +41,16 @@ export class Player {
     this.stepHeight = 0.6;
     this.hp = 20;
     this.maxHp = 20;
+    this.hunger = 20;      // 20 points = 10 drumsticks
+    this.saturation = 5;
+    this.exhaustion = 0;
+    this.armorPoints = 0;  // set from equipped armor by main
+    this.burnT = 0;        // seconds of after-burn from lava
+    this.inLava = false;
+    this.lavaCd = 0;
+    this.fireCd = 0;
+    this.regenCd = 0;
+    this.starveCd = 0;
     this.fly = false;
     this.sneaking = false;
     this.sprinting = false;
@@ -131,6 +141,8 @@ export class Player {
 
     this.inWater = isWaterAt(this.world, this.pos.x, this.pos.y + 0.4, this.pos.z)
       || isWaterAt(this.world, this.pos.x, this.pos.y, this.pos.z);
+    this.inLava = isLavaAt(this.world, this.pos.x, this.pos.y + 0.4, this.pos.z)
+      || isLavaAt(this.world, this.pos.x, this.pos.y, this.pos.z);
     this.eyeInWater = isWaterAt(this.world, this.pos.x, this.pos.y + this.eyeH, this.pos.z);
 
     // --- input ---
@@ -142,7 +154,7 @@ export class Player {
     // sprint: Ctrl while moving forward, or double-tap W (set by the input layer)
     if ((keys.has('ControlLeft') || keys.has('ControlRight')) && f > 0) this.wantSprint = true;
     if (f <= 0 || this.sneaking) this.wantSprint = false;
-    this.sprinting = this.wantSprint && !this.fly && !this.inWater;
+    this.sprinting = this.wantSprint && !this.fly && !this.inWater && this.hunger > 6;
 
     const fwdX = -Math.sin(this.yaw), fwdZ = -Math.cos(this.yaw);
     const rightX = Math.cos(this.yaw), rightZ = -Math.sin(this.yaw);
@@ -161,10 +173,11 @@ export class Player {
       vz += (wz * spd - vz) * 0.5;
       const tvy = (jump ? spd : 0) + (shift ? -spd : 0);
       vy += (tvy - vy) * 0.5;
-    } else if (this.inWater) {
-      vx += wx * WATER_ACCEL;
-      vz += wz * WATER_ACCEL;
-      if (jump) vy += 0.05;
+    } else if (this.inWater || this.inLava) {
+      const accel = this.inLava ? 0.012 : WATER_ACCEL; // lava is thick
+      vx += wx * accel;
+      vz += wz * accel;
+      if (jump) vy += this.inLava ? 0.035 : 0.05;
     } else {
       const speedMult = this.sneaking ? SNEAK_MULT : this.sprinting ? SPRINT_MULT : 1;
       const accel = this.onGround
@@ -175,6 +188,7 @@ export class Player {
       if (jump && this.onGround && this.jumpDelay === 0) {
         vy = JUMP_VEL;
         this.jumpDelay = 10;
+        this.exhaustion += this.sprinting ? 0.2 : 0.05;
         if (this.sprinting && f > 0) { vx += fwdX * 0.2; vz += fwdZ * 0.2; } // sprint-jump boost
       }
     }
@@ -198,16 +212,17 @@ export class Player {
     this.onGround = res.onGround;
     vx = this.vel.x * TICK; vy = this.vel.y * TICK; vz = this.vel.z * TICK;
 
-    // hop out of water at edges
-    if (this.inWater && jump && res.hitWall) vy = 0.3;
+    // hop out of liquid at edges
+    if ((this.inWater || this.inLava) && jump && res.hitWall) vy = 0.3;
 
     // --- gravity & friction (post-move, MC order) ---
     if (this.fly) {
       // handled by the approach blend above
-    } else if (this.inWater) {
-      vx *= WATER_FRICTION;
-      vz *= WATER_FRICTION;
-      vy = vy * WATER_FRICTION - WATER_GRAVITY;
+    } else if (this.inWater || this.inLava) {
+      const fr = this.inLava ? 0.5 : WATER_FRICTION;
+      vx *= fr;
+      vz *= fr;
+      vy = vy * fr - WATER_GRAVITY;
     } else {
       vy = (vy - GRAVITY) * AIR_DRAG_Y;
       const fr = this.onGround ? this.slipUnder() * AIR_FRICTION : AIR_FRICTION;
@@ -222,26 +237,66 @@ export class Player {
 
     // --- fall damage ---
     const fell = this.prevPos.y - this.pos.y;
-    if (this.fly || this.inWater) this.fallDist = 0;
+    if (this.fly || this.inWater || this.inLava) this.fallDist = 0;
     else if (fell > 0) this.fallDist += fell;
     if (this.onGround) {
-      if (this.fallDist > 3.5) this.damage(Math.floor(this.fallDist - 3), time);
+      if (this.fallDist > 3.5) this.damage(Math.floor(this.fallDist - 3), time, 'fall');
       this.fallDist = 0;
     }
 
     // fell out of the world
-    if (this.pos.y < -12) this.damage(100, time);
+    if (this.pos.y < -12) this.damage(100, time, 'void');
 
-    // slow regen out of combat (eat food to heal faster)
-    if (this.hp < this.maxHp && time - this.lastDamage > 10 && time - this.lastRegen > 4) {
+    // --- lava contact + after-burn fire ---
+    this.lavaCd -= TICK; this.fireCd -= TICK;
+    if (this.inLava && !this.fly) {
+      this.burnT = 3;
+      if (this.lavaCd <= 0) { this.lavaCd = 0.5; this.damage(2, time, 'lava'); }
+    } else if (this.inWater) {
+      this.burnT = 0; // water puts the fire out
+    } else if (this.burnT > 0) {
+      this.burnT -= TICK;
+      if (this.fireCd <= 0) { this.fireCd = 1; this.damage(1, time, 'fire'); }
+    }
+
+    // --- hunger ---
+    const distMoved = Math.hypot(this.pos.x - this.prevPos.x, this.pos.z - this.prevPos.z);
+    if (this.sprinting && distMoved > 0.001) this.exhaustion += 0.1 * distMoved;
+    else if (this.inWater && !this.onGround && distMoved > 0.001) this.exhaustion += 0.015 * distMoved;
+    while (this.exhaustion >= 4) {
+      this.exhaustion -= 4;
+      if (this.saturation > 0) this.saturation = Math.max(0, this.saturation - 1);
+      else this.hunger = Math.max(0, this.hunger - 1);
+    }
+    this.regenCd -= TICK;
+    this.starveCd -= TICK;
+    if (this.hunger >= 18 && this.hp < this.maxHp && time - this.lastDamage > 3 && this.regenCd <= 0) {
+      this.regenCd = 2;
       this.hp = Math.min(this.maxHp, this.hp + 1);
-      this.lastRegen = time;
+      this.exhaustion += 3; // healing costs food
+    }
+    if (this.hunger <= 0 && this.starveCd <= 0) {
+      this.starveCd = 4;
+      if (this.hp > 1) this.damage(1, time, 'starve'); // starves down to half a heart
     }
   }
 
-  damage(n, time) {
+  // Restore hunger + saturation from food (called when eating).
+  eat(foodDef) {
+    if (this.hunger >= 20) return false;
+    this.hunger = Math.min(20, this.hunger + foodDef.hunger);
+    this.saturation = Math.min(this.hunger, this.saturation + foodDef.sat);
+    return true;
+  }
+
+  damage(n, time, type = 'generic') {
     if (this.dead || n <= 0) return;
     if (time - this.lastDamage < 0.5) return; // brief invulnerability
+    // armor reduces combat/burn damage (4% per point, capped 80%)
+    if (type === 'attack' || type === 'lava' || type === 'fire') {
+      const reduction = Math.min(0.8, this.armorPoints * 0.04);
+      n = Math.max(1, Math.round(n * (1 - reduction)));
+    }
     this.hp -= n;
     this.lastDamage = time;
     if (this.onDamage) this.onDamage(n);
@@ -257,6 +312,10 @@ export class Player {
     this.prevPos = { ...this.pos };
     this.vel = { x: 0, y: 0, z: 0 };
     this.hp = this.maxHp;
+    this.hunger = 20;
+    this.saturation = 5;
+    this.exhaustion = 0;
+    this.burnT = 0;
     this.dead = false;
     this.fallDist = 0;
     this.fly = false;

@@ -10,7 +10,11 @@ A 3D Minecraft clone that runs entirely in the browser. No build step, no depend
 - **Minecraft-style inventory** — 36 slots (27 + 9 hotbar) with 64-stack limits, a mouse cursor stack, drag-to-distribute, right-click splitting, shift-click quick-move, double-click collect, tooltips, and Q to drop; craft in the 2×2 grid or build a **crafting table** for the 3×3 grid and advanced recipes
 - **Tools** — pickaxes, axes, and shovels mine their blocks much faster; swords hit harder
 - **Mobs & drops** — pigs, sheep, and cows wander the world and drop food and wool; zombies spawn at night, chase you, and burn at dawn
-- **Food** — eat porkchops, beef, mutton, and apples (right-click) to heal
+- **Hunger** — a Minecraft-style hunger/saturation system: sprinting, jumping, and fighting make you hungry; keep the bar high to regenerate health, let it empty and you'll starve
+- **Food & cooking** — mobs drop raw meat; cook it in a furnace for much better food (plus apples and questionable rotten flesh)
+- **Furnaces & smelting** — craft a furnace (8 cobblestone), fuel it with coal/charcoal/wood, and smelt raw iron → ingots, sand → glass, cobblestone → stone, logs → charcoal; furnaces keep burning while you play
+- **Buckets** — scoop and pour water and lava (lava lakes lurk in the deepest caves — it burns, but it's also a 100-smelt fuel)
+- **Armor** — craft iron and diamond armor sets; equip them in dedicated slots to reduce combat and burn damage
 - **Day/night cycle** — moving sun and moon, stars, sunsets, and fog that matches the sky
 - **Survival elements** — health, fall damage, zombie attacks with knockback, death & respawn
 - **Minecraft Java physics** — fixed 20-tick simulation with authentic per-tick gravity/friction formulas, 1.25-block floaty jumps, sprinting (double-tap W), sneaking with edge protection, slippery ice, view bobbing, and Minecraft's mouse sensitivity curve (adjustable on the pause screen)

@@ -2,7 +2,7 @@
 // bob and spin on the ground, get magneted to the player, and picked up.
 
 import * as THREE from 'three';
-import { moveEntity } from './physics.js';
+import { moveEntity, isLavaAt } from './physics.js';
 import { ITEMS } from './items.js';
 
 const MAX_DROPS = 90;
@@ -92,6 +92,7 @@ export class DropManager {
         e.vel.x *= f; e.vel.z *= f;
       }
       if (e.pos.y < -20) { this._remove(i); continue; }
+      if (isLavaAt(this.world, e.pos.x, e.pos.y + 0.1, e.pos.z)) { this._remove(i); continue; } // burned up
 
       e.spin += dt * 2.2;
       e.mesh.position.set(e.pos.x, e.pos.y + 0.12 + Math.sin(e.age * 2.5) * 0.05, e.pos.z);
