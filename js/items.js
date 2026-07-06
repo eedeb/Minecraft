@@ -17,6 +17,7 @@ export const I = {
   IRON_HELMET: 134, IRON_CHEST: 135, IRON_LEGS: 136, IRON_BOOTS: 137,
   DIAMOND_HELMET: 138, DIAMOND_CHEST: 139, DIAMOND_LEGS: 140, DIAMOND_BOOTS: 141,
   FLINT_STEEL: 142, BLAZE_ROD: 143, ENDER_PEARL: 144,
+  BLAZE_POWDER: 145, EYE_OF_ENDER: 146,
 };
 
 export const ARMOR_SLOTS = ['head', 'chest', 'legs', 'feet'];
@@ -51,6 +52,8 @@ ITEMS[I.COOKED_MUTTON] = mat('Cooked Mutton', 'food', { hunger: 6, sat: 9.6 });
 ITEMS[I.FLINT_STEEL] = mat('Flint and Steel', 'lighter', { stack: 1 });
 ITEMS[I.BLAZE_ROD] = mat('Blaze Rod', 'material');
 ITEMS[I.ENDER_PEARL] = mat('Ender Pearl', 'pearl', { stack: 16 }); // right-click to throw & teleport
+ITEMS[I.BLAZE_POWDER] = mat('Blaze Powder', 'material');
+ITEMS[I.EYE_OF_ENDER] = mat('Eye of Ender', 'eye'); // sockets into End portal frames
 ITEMS[I.BUCKET] = mat('Bucket', 'bucket', { liquid: null, stack: 1 });
 ITEMS[I.WATER_BUCKET] = mat('Water Bucket', 'bucket', { liquid: 'water', stack: 1 });
 ITEMS[I.LAVA_BUCKET] = mat('Lava Bucket', 'bucket', { liquid: 'lava', stack: 1 });
@@ -241,6 +244,8 @@ export const RECIPES = [
   shaped(I.BUCKET, 1, ['I.I', '.I.'], { I: I.IRON_INGOT }),
   shapeless(I.FLINT_STEEL, 1, [I.IRON_INGOT, I.COAL]),
   shaped(B.END_FRAME, 1, ['.P.', 'OOO'], { P: I.ENDER_PEARL, O: B.OBSIDIAN }),
+  shapeless(I.BLAZE_POWDER, 2, [I.BLAZE_ROD]),
+  shapeless(I.EYE_OF_ENDER, 1, [I.ENDER_PEARL, I.BLAZE_POWDER]),
   ...armorRecipes,
   shaped(B.STONE_BRICK, 4, ['SS', 'SS'], { S: B.STONE }),
   shaped(B.IRON_BLOCK, 1, ['III', 'III', 'III'], { I: I.IRON_INGOT }),
@@ -459,6 +464,22 @@ ITEM_STENCILS[I.ENDER_PEARL] = {
     '...dmmmdd...', '....dddd....', '............', '............',
   ],
   pal: { m: '#1f7a6e', d: '#124b44', l: '#7de8d4' },
+};
+ITEM_STENCILS[I.BLAZE_POWDER] = {
+  rows: [
+    '............', '.....g......', '..g.....G...', '....G.g.....',
+    '.g...gg...g.', '...gggGg....', '..gGgggggG..', '.gggGggggg..',
+    '..gggggGg...', '............', '............', '............',
+  ],
+  pal: { g: '#f0921e', G: '#ffd050' },
+};
+ITEM_STENCILS[I.EYE_OF_ENDER] = {
+  rows: [
+    '............', '............', '....dmmd....', '...dmmmmd...',
+    '..dmmggmmd..', '..mmgGGgmm..', '..mmgGGgmm..', '..dmmggmmd..',
+    '...dmmmmd...', '....dddd....', '............', '............',
+  ],
+  pal: { m: '#3a8a5e', d: '#1e4a34', g: '#84e8b8', G: '#0a1410' },
 };
 ITEM_STENCILS[I.BLAZE_ROD] = {
   rows: [

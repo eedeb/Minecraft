@@ -1522,6 +1522,17 @@ function updateMining(dt) {
   const mobHit = mobs.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, MOB_REACH);
   const hit = currentTarget();
 
+  // Minecraft critical hits: attacking while falling deals 1.5x with sparks
+  const attackDamage = () => {
+    const base = itemDamage(heldId());
+    const crit = !player.onGround && player.vel.y < 0 && !player.inWater && !player.fly;
+    return { dmg: crit ? Math.round(base * 1.5) : base, crit };
+  };
+  const critFx = (x, y, z) => {
+    particles.burst(x, y, z, [1, 0.85, 0.25], 12, 3.5);
+    sfx.crit();
+  };
+
   // attack mobs when the crosshair is on one
   if (mobHit && (!hit || mobHit.t < hit.t)) {
     stopMining();
@@ -1529,8 +1540,10 @@ function updateMining(dt) {
       punchCd = 0.5;
       swingT = 0;
       player.exhaustion += 0.1;
-      mobHit.mob.hurt(itemDamage(heldId()), dir.x, dir.z, { player, world, particles });
-      sfx.hit();
+      const { dmg, crit } = attackDamage();
+      mobHit.mob.hurt(dmg, dir.x, dir.z, { player, world, particles });
+      if (crit) critFx(mobHit.mob.pos.x, mobHit.mob.pos.y + mobHit.mob.height * 0.8, mobHit.mob.pos.z);
+      else sfx.hit();
     }
     return;
   }
@@ -1543,8 +1556,10 @@ function updateMining(dt) {
         punchCd = 0.5;
         swingT = 0;
         player.exhaustion += 0.1;
-        dragon.hurt(itemDamage(heldId()), { particles });
-        sfx.hit();
+        const { dmg, crit } = attackDamage();
+        dragon.hurt(dmg, { particles });
+        if (crit) critFx(dragon.pos.x, dragon.pos.y + 1, dragon.pos.z);
+        else sfx.hit();
       }
       return;
     }
@@ -1694,17 +1709,20 @@ function useHeld() {
       toast('Nothing to light — needs a sealed obsidian frame (2×3 inside)', 2);
     }
   } else if (it.kind === 'pearl') {
-    // click a placed end frame to socket the pearl; otherwise throw it
-    if (hit && hit.id === B.END_FRAME && hit.t < 5) {
-      world.setBlock(hit.x, hit.y, hit.z, B.END_FRAME_FILLED);
-      consumeHeld();
-      sfx.place();
-      if (!checkEndPortalComplete(hit.x, hit.y, hit.z)) toast('The frame hums softly…', 1.2);
-      return;
-    }
     swingT = 0;
     throwPearl();
     consumeHeld();
+  } else if (it.kind === 'eye') {
+    // eyes of ender socket into End portal frames
+    if (hit && hit.id === B.END_FRAME && hit.t < 5) {
+      swingT = 0;
+      world.setBlock(hit.x, hit.y, hit.z, B.END_FRAME_FILLED);
+      consumeHeld();
+      sfx.place();
+      if (!checkEndPortalComplete(hit.x, hit.y, hit.z)) toast('The eye locks into the frame…', 1.4);
+    } else {
+      toast('Socket it into an End portal frame', 1.4);
+    }
   }
 }
 
