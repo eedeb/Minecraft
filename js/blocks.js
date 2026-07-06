@@ -7,6 +7,7 @@ export const B = {
   SAND: 8, GLASS: 9, WATER: 10, SNOW: 11, BEDROCK: 12, COAL_ORE: 13, IRON_ORE: 14, DIAMOND_ORE: 15,
   WOOL: 16, CRAFTING_TABLE: 17, STONE_BRICK: 18, IRON_BLOCK: 19, DIAMOND_BLOCK: 20,
   ICE: 21, FURNACE: 22, LAVA: 23, OBSIDIAN: 24, PORTAL: 25, NETHERRACK: 26,
+  END_FRAME: 27, END_FRAME_FILLED: 28, END_PORTAL: 29, END_STONE: 30, DRAGON_EGG: 31,
 };
 
 export const TILE = {
@@ -16,6 +17,7 @@ export const TILE = {
   CRAFTING_TOP: 19, CRAFTING_SIDE: 20, STONE_BRICK: 21, IRON_BLOCK: 22, DIAMOND_BLOCK: 23,
   ICE: 24, FURNACE_FRONT: 25, FURNACE_TOP: 26, LAVA: 27,
   OBSIDIAN: 28, PORTAL: 29, NETHERRACK: 30,
+  END_FRAME: 31, END_FRAME_FILLED: 32, END_PORTAL: 33, END_STONE: 34, DRAGON_EGG: 35,
 };
 
 // def: {name, top, bottom, side (tile ids), solid (collision), opaque (face culling), breakable}
@@ -50,13 +52,18 @@ def(B.LAVA, 'Lava', TILE.LAVA, TILE.LAVA, TILE.LAVA, { solid: false, opaque: fal
 def(B.OBSIDIAN, 'Obsidian', TILE.OBSIDIAN, TILE.OBSIDIAN, TILE.OBSIDIAN);
 def(B.PORTAL, 'Nether Portal', TILE.PORTAL, TILE.PORTAL, TILE.PORTAL, { solid: false, opaque: false, breakable: false });
 def(B.NETHERRACK, 'Netherrack', TILE.NETHERRACK, TILE.NETHERRACK, TILE.NETHERRACK);
+def(B.END_FRAME, 'End Portal Frame', TILE.END_FRAME, TILE.END_FRAME, TILE.END_FRAME);
+def(B.END_FRAME_FILLED, 'Filled Portal Frame', TILE.END_FRAME_FILLED, TILE.END_FRAME_FILLED, TILE.END_FRAME_FILLED);
+def(B.END_PORTAL, 'End Portal', TILE.END_PORTAL, TILE.END_PORTAL, TILE.END_PORTAL, { solid: false, opaque: false, breakable: false });
+def(B.END_STONE, 'End Stone', TILE.END_STONE, TILE.END_STONE, TILE.END_STONE);
+def(B.DRAGON_EGG, 'Dragon Egg', TILE.DRAGON_EGG, TILE.DRAGON_EGG, TILE.DRAGON_EGG);
 
 export const isSolid = (id) => !!(BLOCKS[id] && BLOCKS[id].solid);
 export const isOpaque = (id) => !!(BLOCKS[id] && BLOCKS[id].opaque);
 
 // ---------------------------------------------------------------------------
-// Texture atlas: 8x4 grid of 16px tiles -> 128x64 canvas.
-const T = 16, COLS = 8, ROWS = 4;
+// Texture atlas: 8x8 grid of 16px tiles -> 128x128 canvas.
+const T = 16, COLS = 8, ROWS = 8;
 
 const ORE_SPOTS = {
   [TILE.COAL]: { color: [38, 38, 40], spots: [[4, 5], [11, 3], [7, 10], [12, 12], [3, 12]] },
@@ -188,6 +195,31 @@ export function buildAtlas() {
       if (r < 0.14) return [...jitter([66, 20, 20], 10), 255];
       if (r < 0.22) return [...jitter([152, 72, 60], 12), 255];
       return [...jitter([108, 40, 38], 14), 255];
+    },
+    [TILE.END_FRAME]: (x, y) => {
+      if (x === 0 || y === 0 || x === 15 || y === 15) return [...jitter([144, 152, 116], 8), 255];
+      if (x >= 4 && x <= 11 && y >= 4 && y <= 11) return [...jitter([28, 30, 26], 6), 255];
+      return [...jitter([120, 128, 96], 9), 255];
+    },
+    [TILE.END_FRAME_FILLED]: (x, y) => {
+      if (x === 0 || y === 0 || x === 15 || y === 15) return [...jitter([144, 152, 116], 8), 255];
+      if (x >= 5 && x <= 10 && y >= 5 && y <= 10) return [...jitter([64, 220, 190], 18), 255]; // ender eye
+      if (x >= 4 && x <= 11 && y >= 4 && y <= 11) return [...jitter([28, 30, 26], 6), 255];
+      return [...jitter([120, 128, 96], 9), 255];
+    },
+    [TILE.END_PORTAL]: () => {
+      const r = rand();
+      if (r < 0.04) return [...jitter([120, 230, 200], 30), 255]; // star specks
+      if (r < 0.07) return [...jitter([180, 120, 240], 30), 255];
+      return [...jitter([8, 10, 16], 5), 255];
+    },
+    [TILE.END_STONE]: () => {
+      if (rand() < 0.2) return [...jitter([200, 203, 158], 8), 255];
+      return [...jitter([219, 222, 177], 9), 255];
+    },
+    [TILE.DRAGON_EGG]: () => {
+      if (rand() < 0.12) return [...jitter([110, 40, 160], 18), 255];
+      return [...jitter([18, 12, 24], 7), 255];
     },
   };
   const oreP = (tile) => (x, y) => {

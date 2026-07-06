@@ -16,7 +16,7 @@ export const I = {
   BUCKET: 131, WATER_BUCKET: 132, LAVA_BUCKET: 133,
   IRON_HELMET: 134, IRON_CHEST: 135, IRON_LEGS: 136, IRON_BOOTS: 137,
   DIAMOND_HELMET: 138, DIAMOND_CHEST: 139, DIAMOND_LEGS: 140, DIAMOND_BOOTS: 141,
-  FLINT_STEEL: 142, BLAZE_ROD: 143,
+  FLINT_STEEL: 142, BLAZE_ROD: 143, ENDER_PEARL: 144,
 };
 
 export const ARMOR_SLOTS = ['head', 'chest', 'legs', 'feet'];
@@ -50,6 +50,7 @@ ITEMS[I.STEAK] = mat('Steak', 'food', { hunger: 8, sat: 12.8 });
 ITEMS[I.COOKED_MUTTON] = mat('Cooked Mutton', 'food', { hunger: 6, sat: 9.6 });
 ITEMS[I.FLINT_STEEL] = mat('Flint and Steel', 'lighter', { stack: 1 });
 ITEMS[I.BLAZE_ROD] = mat('Blaze Rod', 'material');
+ITEMS[I.ENDER_PEARL] = mat('Ender Pearl', 'pearl', { stack: 16 }); // right-click to throw & teleport
 ITEMS[I.BUCKET] = mat('Bucket', 'bucket', { liquid: null, stack: 1 });
 ITEMS[I.WATER_BUCKET] = mat('Water Bucket', 'bucket', { liquid: 'water', stack: 1 });
 ITEMS[I.LAVA_BUCKET] = mat('Lava Bucket', 'bucket', { liquid: 'lava', stack: 1 });
@@ -160,6 +161,10 @@ export const MINING = {
   [B.ICE]: { hand: 1.0, tool: 'pickaxe', tier: 0, drop: () => null },
   [B.OBSIDIAN]: { hand: 150, tool: 'pickaxe', tier: 4, drop: () => [B.OBSIDIAN, 1] }, // diamond pick: ~9.4s
   [B.NETHERRACK]: { hand: 2, tool: 'pickaxe', tier: 1, drop: () => [B.NETHERRACK, 1] },
+  [B.END_STONE]: { hand: 5, tool: 'pickaxe', tier: 1, drop: () => [B.END_STONE, 1] },
+  [B.END_FRAME]: { hand: 22, tool: 'pickaxe', tier: 3, drop: () => [B.END_FRAME, 1] },
+  [B.END_FRAME_FILLED]: { hand: 22, tool: 'pickaxe', tier: 3, drop: () => [B.END_FRAME, 1] },
+  [B.DRAGON_EGG]: { hand: 1.5, tool: null, tier: 0, drop: () => [B.DRAGON_EGG, 1] },
   [B.STONE_BRICK]: { hand: 7.5, tool: 'pickaxe', tier: 1, drop: () => [B.STONE_BRICK, 1] },
   [B.IRON_BLOCK]: { hand: 15, tool: 'pickaxe', tier: 2, drop: () => [B.IRON_BLOCK, 1] },
   [B.DIAMOND_BLOCK]: { hand: 15, tool: 'pickaxe', tier: 3, drop: () => [B.DIAMOND_BLOCK, 1] },
@@ -235,6 +240,7 @@ export const RECIPES = [
   ...toolRecipes,
   shaped(I.BUCKET, 1, ['I.I', '.I.'], { I: I.IRON_INGOT }),
   shapeless(I.FLINT_STEEL, 1, [I.IRON_INGOT, I.COAL]),
+  shaped(B.END_FRAME, 1, ['.P.', 'OOO'], { P: I.ENDER_PEARL, O: B.OBSIDIAN }),
   ...armorRecipes,
   shaped(B.STONE_BRICK, 4, ['SS', 'SS'], { S: B.STONE }),
   shaped(B.IRON_BLOCK, 1, ['III', 'III', 'III'], { I: I.IRON_INGOT }),
@@ -445,6 +451,14 @@ ITEM_STENCILS[I.FLINT_STEEL] = {
     '.....fff....', '....ff......', '............', '............',
   ],
   pal: { m: '#b8b8be', f: '#4a4a52' },
+};
+ITEM_STENCILS[I.ENDER_PEARL] = {
+  rows: [
+    '............', '............', '....dmmd....', '...dmlmmd...',
+    '..dmllmmmd..', '..mmlmmmmm..', '..mmmmmmdm..', '..dmmmmmdd..',
+    '...dmmmdd...', '....dddd....', '............', '............',
+  ],
+  pal: { m: '#1f7a6e', d: '#124b44', l: '#7de8d4' },
 };
 ITEM_STENCILS[I.BLAZE_ROD] = {
   rows: [

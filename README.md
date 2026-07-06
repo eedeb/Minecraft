@@ -17,6 +17,8 @@ A 3D Minecraft clone that runs entirely in the browser. No build step, no depend
 - **Armor** — craft iron and diamond armor sets; equip them in dedicated slots to reduce combat and burn damage
 - **Obsidian & nether portals** — pour water on lava to make obsidian (diamond pickaxe to mine), build a portal frame, light it with flint and steel (iron + coal), and step through
 - **The Nether** — a cavernous netherrack dimension with a lava ocean and **blazes** that hover and hurl fireballs; distance scales 1:8, and blaze rods make great furnace fuel
+- **Ender pearls & endermen** — tall, night-spawning endermen drop pearls and teleport away when struck; throw pearls (right-click) to teleport yourself
+- **The End & the Ender Dragon** — craft End portal frames (obsidian + pearl), build the 12-frame ring, socket a pearl into each, and drop through to a floating end-stone island where the **Ender Dragon** circles the obsidian pillars and swoops at you; slay it to open the exit portal and claim the dragon egg
 - **Day/night cycle** — moving sun and moon, stars, sunsets, and fog that matches the sky
 - **Survival elements** — health, fall damage, zombie attacks with knockback, death & respawn
 - **Minecraft Java physics** — fixed 20-tick simulation with authentic per-tick gravity/friction formulas, 1.25-block floaty jumps, sprinting (double-tap W), sneaking with edge protection, slippery ice, view bobbing, and Minecraft's mouse sensitivity curve (adjustable on the pause screen)

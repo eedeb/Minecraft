@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { B, BLOCKS, buildAtlas, tileUV, computeAvgColors } from './blocks.js';
 import { World, CHUNK, HEIGHT, SEA } from './world.js';
 import { Player } from './player.js';
-import { MobManager } from './mobs.js';
+import { MobManager, Dragon } from './mobs.js';
 import { blockOverlapsEntity } from './physics.js';
 import { initAudio, sfx } from './sound.js';
 import { mulberry32 } from './noise.js';
@@ -138,20 +138,27 @@ function itemTexture(id) {
 // ---------------------------------------------------------------------------
 // World / player / inventory
 
-let dim = saved?.dim === 'nether' ? 'nether' : 'overworld';
+let dim = ['nether', 'end'].includes(saved?.dim) ? saved.dim : 'overworld';
 const worldOver = new World(seed, scene, materials, renderDist, 'overworld');
 const worldNether = new World((seed ^ 0x5a17c3) | 0, scene, materials, renderDist, 'nether');
+const worldEnd = new World((seed ^ 0x33cc99) | 0, scene, materials, renderDist, 'end');
 if (saved && saved.edits) {
   for (const [ck, entries] of saved.edits) worldOver.edits.set(ck, new Map(entries));
 }
 if (saved && saved.editsN) {
   for (const [ck, entries] of saved.editsN) worldNether.edits.set(ck, new Map(entries));
 }
+if (saved && saved.editsE) {
+  for (const [ck, entries] of saved.editsE) worldEnd.edits.set(ck, new Map(entries));
+}
 const dims = {
   overworld: { world: worldOver, portals: saved?.portals?.overworld || [] },
   nether: { world: worldNether, portals: saved?.portals?.nether || [] },
+  end: { world: worldEnd, portals: [] },
 };
 let world = dims[dim].world;
+let dragonDefeated = !!saved?.dragonDefeated;
+let dragon = null;
 
 const spawnPoint = worldOver.findSpawn();
 const player = new Player(world, spawnPoint);
@@ -196,6 +203,7 @@ if (saved?.player) {
 const mobsByDim = {
   overworld: new MobManager(scene, worldOver),
   nether: new MobManager(scene, worldNether),
+  end: new MobManager(scene, worldEnd),
 };
 let mobs = mobsByDim[dim];
 
@@ -300,6 +308,7 @@ const dropResources = {
 const dropsByDim = {
   overworld: new DropManager(scene, worldOver, dropResources),
   nether: new DropManager(scene, worldNether, dropResources),
+  end: new DropManager(scene, worldEnd, dropResources),
 };
 let drops = dropsByDim[dim];
 
@@ -441,6 +450,7 @@ function findOrBuildPortal(tx, tz) {
 
 function setDimension(target) {
   if (target === dim) return;
+  if (dim === 'end' && dragon) dragon.group.visible = false;
   world.unloadAll();
   mobs.setActive(false);
   drops.setActive(false);
@@ -458,22 +468,162 @@ function setDimension(target) {
   }
 }
 
-function switchDimension(target) {
-  const scale = target === 'nether' ? 1 / 8 : 8;
-  const tx = Math.round(player.pos.x * scale), tz = Math.round(player.pos.z * scale);
-  setDimension(target);
-  const arrive = findOrBuildPortal(tx, tz);
-  player.pos = { x: arrive.x + 0.5, y: arrive.y + 0.02, z: arrive.z + 0.5 };
+function resetPlayerAt(x, y, z) {
+  player.pos = { x, y, z };
   player.prevPos = { ...player.pos };
   player.vel = { x: 0, y: 0, z: 0 };
   player.fallDist = 0;
   player.burnT = 0;
   portalCd = 3;
   portalT = 0;
+}
+
+function switchDimension(target) {
+  const scale = target === 'nether' ? 1 / 8 : 8;
+  const tx = Math.round(player.pos.x * scale), tz = Math.round(player.pos.z * scale);
+  setDimension(target);
+  const arrive = findOrBuildPortal(tx, tz);
+  resetPlayerAt(arrive.x + 0.5, arrive.y + 0.02, arrive.z + 0.5);
   ensureAround(player.pos.x, player.pos.z);
   sfx.portal();
   toast(target === 'nether' ? 'Entering the Nether…' : 'Returning to the Overworld…', 2.5);
   save();
+}
+
+// --- The End ---------------------------------------------------------------
+
+function enterEnd() {
+  setDimension('end');
+  // obsidian arrival platform off the island's western rim
+  ensureAround(-54, 0);
+  for (let x = -56; x <= -52; x++) {
+    for (let z = -2; z <= 2; z++) {
+      world.setBlock(x, 40, z, B.OBSIDIAN);
+      for (let y = 41; y <= 43; y++) world.setBlock(x, y, z, B.AIR);
+    }
+  }
+  resetPlayerAt(-53.5, 41.02, 0.5);
+  ensureAround(player.pos.x, player.pos.z);
+  if (!dragonDefeated && !dragon) {
+    dragon = new Dragon(scene);
+    dragon.onDeath = onDragonDeath;
+    toast('The Ender Dragon circles above…', 3);
+  } else {
+    toast('Entering the End…', 2.5);
+  }
+  if (dragon) dragon.group.visible = true;
+  sfx.portal();
+  save();
+}
+
+function leaveEnd() {
+  setDimension('overworld');
+  if (dragon) dragon.group.visible = false;
+  resetPlayerAt(player.spawn.x, player.spawn.y, player.spawn.z);
+  ensureAround(player.pos.x, player.pos.z);
+  sfx.portal();
+  toast('Returning home…', 2.5);
+  save();
+}
+
+function onDragonDeath() {
+  dragonDefeated = true;
+  toast('THE ENDER DRAGON HAS BEEN DEFEATED!', 6);
+  const dp = dragon.pos;
+  for (let i = 0; i < 8; i++) {
+    setTimeout(() => particles.burst(
+      dp.x + (Math.random() - 0.5) * 4, dp.y + (Math.random() - 0.5) * 3, dp.z + (Math.random() - 0.5) * 4,
+      [0.75, 0.3, 0.9], 20, 6), i * 180);
+  }
+  sfx.portal();
+  setTimeout(() => { if (dragon) { dragon.dispose(); dragon = null; } }, 1600);
+  // exit portal + the dragon egg trophy at the island's heart
+  ensureAround(0, 0);
+  const s = world.getSurface(0, 0);
+  const py = (s ? s.y : 38) + 1;
+  for (let i = -1; i <= 1; i++) {
+    for (let j = -1; j <= 1; j++) world.setBlock(i, py, j, B.END_PORTAL);
+    world.setBlock(i, py, -2, B.BEDROCK); world.setBlock(i, py, 2, B.BEDROCK);
+    world.setBlock(-2, py, i, B.BEDROCK); world.setBlock(2, py, i, B.BEDROCK);
+  }
+  world.setBlock(2, py + 1, 2, B.BEDROCK);
+  world.setBlock(2, py + 2, 2, B.DRAGON_EGG);
+  save();
+}
+
+// filling the 12th frame opens the 3x3 floor portal
+function checkEndPortalComplete(fx, y, fz) {
+  for (let ox = fx - 3; ox <= fx + 1; ox++) {
+    for (let oz = fz - 3; oz <= fz + 1; oz++) {
+      const ring = [];
+      for (let i = 0; i < 3; i++) {
+        ring.push([ox - 1, oz + i], [ox + 3, oz + i], [ox + i, oz - 1], [ox + i, oz + 3]);
+      }
+      if (!ring.every(([rx, rz]) => world.getBlock(rx, y, rz) === B.END_FRAME_FILLED)) continue;
+      let clear = true;
+      for (let i = 0; i < 3 && clear; i++)
+        for (let j = 0; j < 3 && clear; j++) {
+          const b = world.getBlock(ox + i, y, oz + j);
+          if (b !== B.AIR && b !== B.END_PORTAL) clear = false;
+        }
+      if (!clear) continue;
+      for (let i = 0; i < 3; i++)
+        for (let j = 0; j < 3; j++) world.setBlock(ox + i, y, oz + j, B.END_PORTAL);
+      sfx.portal();
+      toast('The End portal opens beneath you…', 3);
+      return true;
+    }
+  }
+  return false;
+}
+
+// --- thrown ender pearls -----------------------------------------------------
+
+const pearls = [];
+function throwPearl() {
+  const eye = player.eye();
+  const dir = player.forwardDir();
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.35, 0.35),
+    new THREE.MeshBasicMaterial({ map: itemTexture(I.ENDER_PEARL), transparent: true, alphaTest: 0.1, side: THREE.DoubleSide })
+  );
+  mesh.position.set(eye.x, eye.y, eye.z);
+  scene.add(mesh);
+  pearls.push({
+    pos: { x: eye.x + dir.x * 0.4, y: eye.y + dir.y * 0.4, z: eye.z + dir.z * 0.4 },
+    vel: { x: dir.x * 20, y: dir.y * 20 + 3, z: dir.z * 20 },
+    ttl: 6, mesh,
+  });
+  sfx.pop();
+}
+
+function updatePearls(dt) {
+  for (let i = pearls.length - 1; i >= 0; i--) {
+    const pe = pearls[i];
+    pe.ttl -= dt;
+    pe.vel.y -= 22 * dt;
+    const nx = pe.pos.x + pe.vel.x * dt, ny = pe.pos.y + pe.vel.y * dt, nz = pe.pos.z + pe.vel.z * dt;
+    const hitSolid = BLOCKS[world.getBlock(Math.floor(nx), Math.floor(ny), Math.floor(nz))].solid;
+    if (hitSolid || pe.ttl <= 0) {
+      if (hitSolid && !player.dead) {
+        // teleport to the last clear spot before impact, MC-style landing damage
+        player.pos = { x: pe.pos.x, y: Math.max(1, Math.floor(pe.pos.y)) + 0.02, z: pe.pos.z };
+        player.prevPos = { ...player.pos };
+        player.vel = { x: 0, y: 0, z: 0 };
+        player.fallDist = 0;
+        player.damage(2, simTime, 'fall');
+        particles.burst(player.pos.x, player.pos.y + 1, player.pos.z, [0.7, 0.25, 0.85], 16, 3.5);
+        sfx.portal();
+      }
+      scene.remove(pe.mesh);
+      pe.mesh.geometry.dispose();
+      pearls.splice(i, 1);
+      continue;
+    }
+    pe.pos.x = nx; pe.pos.y = ny; pe.pos.z = nz;
+    pe.mesh.position.set(nx, ny, nz);
+    pe.mesh.rotation.y += dt * 6;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -580,6 +730,8 @@ const hungerEl = document.getElementById('hunger');
 const armorbarEl = document.getElementById('armorbar');
 const fireOverlayEl = document.getElementById('fireOverlay');
 const portalOverlayEl = document.getElementById('portalOverlay');
+const bossbarEl = document.getElementById('bossbar');
+const bossFillEl = document.getElementById('bossFill');
 const armorRowEl = document.getElementById('armorRow');
 const craftAreaEl = document.getElementById('craftArea');
 const furnacePanelEl = document.getElementById('furnacePanel');
@@ -1377,10 +1529,25 @@ function updateMining(dt) {
       punchCd = 0.5;
       swingT = 0;
       player.exhaustion += 0.1;
-      mobHit.mob.hurt(itemDamage(heldId()), dir.x, dir.z, { player });
+      mobHit.mob.hurt(itemDamage(heldId()), dir.x, dir.z, { player, world, particles });
       sfx.hit();
     }
     return;
+  }
+  // the dragon is a huge target — check it before blocks
+  if (dim === 'end' && dragon && !dragon.dead) {
+    const dt2 = dragon.rayHit(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, MOB_REACH + 2);
+    if (dt2 !== null && (!hit || dt2 < hit.t)) {
+      stopMining();
+      if (punchCd <= 0) {
+        punchCd = 0.5;
+        swingT = 0;
+        player.exhaustion += 0.1;
+        dragon.hurt(itemDamage(heldId()), { particles });
+        sfx.hit();
+      }
+      return;
+    }
   }
   if (!hit) { stopMining(); return; }
 
@@ -1526,6 +1693,18 @@ function useHeld() {
     } else {
       toast('Nothing to light — needs a sealed obsidian frame (2×3 inside)', 2);
     }
+  } else if (it.kind === 'pearl') {
+    // click a placed end frame to socket the pearl; otherwise throw it
+    if (hit && hit.id === B.END_FRAME && hit.t < 5) {
+      world.setBlock(hit.x, hit.y, hit.z, B.END_FRAME_FILLED);
+      consumeHeld();
+      sfx.place();
+      if (!checkEndPortalComplete(hit.x, hit.y, hit.z)) toast('The frame hums softly…', 1.2);
+      return;
+    }
+    swingT = 0;
+    throwPearl();
+    consumeHeld();
   }
 }
 
@@ -1546,8 +1725,21 @@ const skyColor = new THREE.Color();
 let daylight = 1;
 
 const netherSky = new THREE.Color(0x1c0808);
+const endSky = new THREE.Color(0x0b0714);
 
 function updateDayNight(dt) {
+  if (world.dim === 'end') {
+    scene.background = endSky;
+    scene.fog.color.copy(endSky);
+    ambient.intensity = 0.6;
+    sun.intensity = 0.18;
+    sunMesh.visible = false;
+    moonMesh.visible = false;
+    stars.position.set(player.pos.x, player.pos.y, player.pos.z);
+    starMat.opacity = 0.55; // endless night sky
+    daylight = 0.35;
+    return;
+  }
   if (world.dim === 'nether') {
     scene.background = netherSky;
     scene.fog.color.copy(netherSky);
@@ -1599,10 +1791,14 @@ function save() {
     for (const [ck, m] of worldOver.edits) edits.push([ck, [...m]]);
     const editsN = [];
     for (const [ck, m] of worldNether.edits) editsN.push([ck, [...m]]);
+    const editsE = [];
+    for (const [ck, m] of worldEnd.edits) editsE.push([ck, [...m]]);
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       seed: worldOver.seed,
       dim,
       editsN,
+      editsE,
+      dragonDefeated,
       portals: { overworld: dims.overworld.portals, nether: dims.nether.portals },
       timeOfDay,
       player: { pos: player.pos, yaw: player.yaw, pitch: player.pitch, hp: player.hp, hunger: player.hunger, saturation: player.saturation, sel: selected },
@@ -1646,6 +1842,8 @@ function frame(dt) {
     mobs.update(dt, { world, player, daylight, time, sfx, particles, drops });
     drops.update(dt, { player, inventory, onPickup: () => sfx.pickup() });
     if (furnaces.tick(dt) && invOpen && invMode === 'furnace') renderInvScreen();
+    if (dim === 'end' && dragon && !dragon.dead) dragon.update(dt, { player, time, sfx, particles });
+    updatePearls(dt);
     updateMining(dt);
 
     // held-repeat placing / eating
@@ -1711,16 +1909,26 @@ function frame(dt) {
   } else {
     underwaterEl.style.opacity = 0;
     scene.fog.near = world.dim === 'nether' ? 10 : renderDist * CHUNK * 0.55;
-    scene.fog.far = renderDist * CHUNK * (world.dim === 'nether' ? 0.75 : 0.95);
+    scene.fog.far = renderDist * CHUNK * (world.dim === 'nether' ? 0.75 : world.dim === 'end' ? 1.15 : 0.95);
   }
 
   // stand in a portal to travel
   if ((started || forceStarted) && !paused && !player.dead) {
-    inPortalNow = world.getBlock(Math.floor(player.pos.x), Math.floor(player.pos.y + 0.5), Math.floor(player.pos.z)) === B.PORTAL;
+    const standIn = world.getBlock(Math.floor(player.pos.x), Math.floor(player.pos.y + 0.5), Math.floor(player.pos.z));
+    inPortalNow = standIn === B.PORTAL || standIn === B.END_PORTAL;
     portalCd -= dt;
     if (inPortalNow && portalCd <= 0) {
       portalT += dt;
-      if (portalT >= 2) switchDimension(dim === 'nether' ? 'overworld' : 'nether');
+      const need = standIn === B.END_PORTAL ? 0.8 : 2;
+      if (portalT >= need) {
+        portalT = 0;
+        if (standIn === B.END_PORTAL) {
+          if (dim === 'end') leaveEnd();
+          else enterEnd();
+        } else {
+          switchDimension(dim === 'nether' ? 'overworld' : 'nether');
+        }
+      }
     } else if (!inPortalNow) {
       portalT = Math.max(0, portalT - dt * 3);
     }
@@ -1728,6 +1936,11 @@ function frame(dt) {
   } else if (player.dead) {
     portalOverlayEl.style.opacity = 0;
   }
+
+  // boss bar
+  const bossVisible = dim === 'end' && dragon && !dragon.dead;
+  bossbarEl.classList.toggle('show', !!bossVisible);
+  if (bossVisible) bossFillEl.style.width = (dragon.hp / dragon.maxHp * 100) + '%';
 
   // toast fade
   if (blockNameT > 0) {
@@ -1746,6 +1959,12 @@ function frame(dt) {
   }
 
   renderer.render(scene, camera);
+}
+
+// booted mid-End with the dragon still alive: bring it back
+if (dim === 'end' && !dragonDefeated) {
+  dragon = new Dragon(scene);
+  dragon.onDeath = onDragonDeath;
 }
 
 renderHotbar();
@@ -1790,6 +2009,11 @@ window.__game = {
   suppressSave: () => { wipeSave = true; },
   getDim: () => dim,
   switchDimension, setDimension, tryLightPortal, dims,
+  enterEnd, leaveEnd, checkEndPortalComplete, throwPearl,
+  getDragon: () => dragon,
+  isDragonDefeated: () => dragonDefeated,
+  setDragonDefeated: (v) => { dragonDefeated = !!v; },
+  respawnDragon: () => { if (!dragon) { dragon = new Dragon(scene); dragon.onDeath = onDragonDeath; dragon.group.visible = dim === 'end'; } },
   state: () => ({ breakingHeld, placingHeld, mining: mining && { ...mining }, invOpen, locked, forceStarted, punchCd }),
   setBreaking: (v) => { breakingHeld = v; },
   step: (dt = 0.05, n = 1) => { for (let i = 0; i < n; i++) frame(dt); },

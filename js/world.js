@@ -101,8 +101,53 @@ export class World {
     return data;
   }
 
+  // The End: a floating end-stone island in the void, ringed by obsidian pillars.
+  genEndChunk(cx, cz) {
+    const data = new Uint8Array(CHUNK * CHUNK * HEIGHT);
+    const p = this.pNoise;
+    const baseX = cx * CHUNK, baseZ = cz * CHUNK;
+    // obsidian pillar ring (deterministic positions)
+    const pillars = [];
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      pillars.push({ x: Math.round(Math.cos(a) * 26), z: Math.round(Math.sin(a) * 26), top: 50 + (i % 3) * 4 });
+    }
+    for (let lz = 0; lz < CHUNK; lz++) {
+      for (let lx = 0; lx < CHUNK; lx++) {
+        const wx = baseX + lx, wz = baseZ + lz;
+        const dist = Math.hypot(wx, wz);
+        const R = 46 + fbm2(p, wx * 0.04, wz * 0.04, 3) * 7;
+        if (dist < R) {
+          const edge = 1 - dist / R; // 1 at center, 0 at rim
+          const topY = Math.round(38 + fbm2(p, wx * 0.05 + 300, wz * 0.05 - 300, 3) * 3 - (1 - edge) * 4);
+          const botY = Math.round(38 - edge * 16 - fbm2(p, wx * 0.06 - 900, wz * 0.06 + 900, 2) * 5);
+          for (let y = Math.max(1, botY); y <= Math.min(HEIGHT - 2, topY); y++) {
+            data[lx + lz * CHUNK + y * CHUNK * CHUNK] = B.END_STONE;
+          }
+        }
+        for (const pil of pillars) {
+          if (Math.hypot(wx - pil.x, wz - pil.z) < 2.6) {
+            for (let y = 30; y <= pil.top; y++) {
+              data[lx + lz * CHUNK + y * CHUNK * CHUNK] = B.OBSIDIAN;
+            }
+          }
+        }
+      }
+    }
+    const ce = this.edits.get(key(cx, cz));
+    if (ce) {
+      for (const [lkey, id] of ce) {
+        const [lx, y, lz] = lkey.split(',').map(Number);
+        if (lx >= 0 && lx < CHUNK && y >= 0 && y < HEIGHT && lz >= 0 && lz < CHUNK)
+          data[lx + lz * CHUNK + y * CHUNK * CHUNK] = id;
+      }
+    }
+    return data;
+  }
+
   genChunkData(cx, cz) {
     if (this.dim === 'nether') return this.genNetherChunk(cx, cz);
+    if (this.dim === 'end') return this.genEndChunk(cx, cz);
     const data = new Uint8Array(CHUNK * CHUNK * HEIGHT);
     const PAD = 3; // extra columns so trees from neighbor chunks reach in
     const W = CHUNK + PAD * 2;
@@ -277,7 +322,7 @@ export class World {
           if (id === B.AIR) continue;
           const blk = BLOCKS[id];
           const water = id === B.WATER;
-          const lava = id === B.LAVA || id === B.PORTAL; // both render unlit/glowing
+          const lava = id === B.LAVA || id === B.PORTAL || id === B.END_PORTAL; // all render unlit/glowing
 
           for (const f of FACES) {
             const nb = get(lx + f.dir[0], y + f.dir[1], lz + f.dir[2]);

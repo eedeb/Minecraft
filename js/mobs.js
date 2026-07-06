@@ -13,6 +13,7 @@ const DROP_TABLE = {
   cow: [[I.BEEF, 1, 2]],
   zombie: [[I.FLESH, 0, 2]],
   blaze: [[I.BLAZE_ROD, 0, 1]],
+  enderman: [[I.ENDER_PEARL, 1, 2]],
 };
 
 const GRAVITY = 26;
@@ -21,8 +22,9 @@ const TYPES = {
   pig: { hp: 10, speed: 1.7, half: 0.35, height: 0.85, color: 0xf0a2a0 },
   sheep: { hp: 8, speed: 1.5, half: 0.4, height: 1.0, color: 0xe8e8e8 },
   cow: { hp: 10, speed: 1.5, half: 0.4, height: 1.25, color: 0x6e4a2f },
-  zombie: { hp: 20, speed: 2.7, half: 0.3, height: 1.8, color: 0x5da357 },
+  zombie: { hp: 20, speed: 2.7, half: 0.3, height: 1.8, color: 0x5da357, dmg: 3 },
   blaze: { hp: 20, speed: 1.6, half: 0.35, height: 1.6, color: 0xe8a428 },
+  enderman: { hp: 40, speed: 3.4, half: 0.35, height: 2.9, color: 0xbb44dd, dmg: 5 },
 };
 
 function box(w, h, d, color, x, y, z) {
@@ -91,6 +93,20 @@ const MODELS = {
     legs.forEach(l => g.add(l));
     return { legs, head };
   },
+  enderman(g) {
+    const dark = 0x15151a;
+    const legs = [
+      leg(0.16, 1.35, dark, -0.12, 1.35, 0), leg(0.16, 1.35, dark, 0.12, 1.35, 0),
+    ];
+    legs.forEach(l => g.add(l));
+    g.add(box(0.5, 0.85, 0.28, dark, 0, 1.78, 0));
+    g.add(box(0.12, 1.15, 0.12, dark, -0.33, 1.6, 0));
+    g.add(box(0.12, 1.15, 0.12, dark, 0.33, 1.6, 0));
+    const head = box(0.42, 0.42, 0.42, dark, 0, 2.45, 0);
+    head.add(box(0.32, 0.07, 0.02, 0xdd66ff, 0, 0.02, -0.215)); // glowing eyes
+    g.add(head);
+    return { legs, head };
+  },
   blaze(g) {
     const gold = 0xe8a428, dark = 0xb87818;
     const head = box(0.45, 0.45, 0.45, gold, 0, 1.25, 0);
@@ -128,7 +144,7 @@ export class Mob {
     const t = TYPES[type];
     this.id = nextId++;
     this.type = type;
-    this.hostile = type === 'zombie' || type === 'blaze';
+    this.hostile = type === 'zombie' || type === 'blaze' || type === 'enderman';
     this.flying = type === 'blaze';
     this.shootCd = 2 + Math.random() * 2;
     this.hp = t.hp;
@@ -211,7 +227,7 @@ export class Mob {
         const dy = Math.abs((player.pos.y) - this.pos.y);
         if (dist < 1.6 && dy < 2 && this.attackCd <= 0) {
           this.attackCd = 1.1;
-          player.damage(3, time, 'attack');
+          player.damage(TYPES[this.type].dmg || 3, time, 'attack');
           // knock the player back
           const kx = dx / (dist || 1), kz = dz / (dist || 1);
           player.vel.x += kx * 7;
@@ -308,7 +324,21 @@ export class Mob {
     this.vel.z += kbZ * 8;
     this.vel.y = 5;
     if (this.hostile) this.targetYaw = Math.atan2(-(ctx.player.pos.x - this.pos.x), -(ctx.player.pos.z - this.pos.z));
-    if (this.hp <= 0) this.dead = true;
+    if (this.hp <= 0) { this.dead = true; return; }
+    // endermen blink away when struck
+    if (this.type === 'enderman' && ctx.world && Math.random() < 0.6) {
+      for (let tries = 0; tries < 8; tries++) {
+        const nx = Math.floor(this.pos.x + (Math.random() - 0.5) * 24);
+        const nz = Math.floor(this.pos.z + (Math.random() - 0.5) * 24);
+        if (!ctx.world.hasDataAt(nx, nz)) continue;
+        const s = ctx.world.getSurface(nx, nz);
+        if (!s || s.id === B.WATER || s.id === B.LAVA) continue;
+        if (ctx.particles) ctx.particles.burst(this.pos.x, this.pos.y + 1.4, this.pos.z, [0.7, 0.25, 0.85], 14, 3);
+        this.pos = { x: nx + 0.5, y: s.y + 1.02, z: nz + 0.5 };
+        this.vel = { x: 0, y: 0, z: 0 };
+        break;
+      }
+    }
   }
 
   dispose(scene) {
@@ -439,13 +469,26 @@ export class MobManager {
       return;
     }
 
+    // the End: endermen roam the island
+    if (this.world.dim === 'end') {
+      if (this.mobs.filter(m => m.type === 'enderman').length >= 4) return;
+      const surf = this.world.getSurface(x, z);
+      if (!surf || surf.id !== B.END_STONE) return;
+      const mob = new Mob('enderman', x + 0.5, surf.y + 1.01, z + 0.5);
+      this.mobs.push(mob);
+      this.scene.add(mob.group);
+      return;
+    }
+
     const night = daylight < 0.25;
     const passives = this.mobs.filter(m => !m.hostile).length;
-    const zombies = this.mobs.length - passives;
+    const zombies = this.mobs.filter(m => m.type === 'zombie').length;
+    const endermen = this.mobs.filter(m => m.type === 'enderman').length;
 
     let type = null;
-    if (night && zombies < this.zombieCap && Math.random() < 0.7) {
-      type = 'zombie';
+    if (night && Math.random() < 0.75) {
+      if (endermen < 2 && Math.random() < 0.22) type = 'enderman';
+      else if (zombies < this.zombieCap) type = 'zombie';
     } else if (passives < this.passiveCap) {
       type = ['pig', 'sheep', 'cow'][(Math.random() * 3) | 0];
     }
@@ -456,7 +499,7 @@ export class MobManager {
     if (surf.y >= 70) return;
     // passive animals prefer grass
     if (!TYPES[type]) return;
-    if (type !== 'zombie' && surf.id !== B.GRASS && surf.id !== B.SAND && surf.id !== B.SNOW) return;
+    if (['pig', 'sheep', 'cow'].includes(type) && surf.id !== B.GRASS && surf.id !== B.SAND && surf.id !== B.SNOW) return;
 
     const mob = new Mob(type, x + 0.5, surf.y + 1.01, z + 0.5);
     this.mobs.push(mob);
@@ -488,5 +531,149 @@ export class MobManager {
     this.mobs.push(mob);
     this.scene.add(mob.group);
     return mob;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The Ender Dragon: a boss that circles the End's pillars and swoops at you.
+
+export class Dragon {
+  constructor(scene) {
+    this.scene = scene;
+    this.hp = 200;
+    this.maxHp = 200;
+    this.pos = { x: 0, y: 50, z: -26 };
+    this.vel = { x: 0, y: 0, z: 0 };
+    this.yaw = 0;
+    this.state = 'circle';
+    this.angle = 0;
+    this.swoopT = 14; // grace period after arriving
+    this.attackCd = 0;
+    this.flashT = 0;
+    this.flapT = 0;
+    this.dead = false;
+    this.onDeath = null;
+
+    const g = this.group = new THREE.Group();
+    const dark = 0x16121c, grey = 0x2a2433;
+    this.parts = {};
+    g.add(box(1.4, 1.1, 3.2, dark, 0, 0, 0)); // body
+    const head = box(0.9, 0.8, 1.3, dark, 0, 0.25, -2.2);
+    head.add(box(0.55, 0.35, 0.7, grey, 0, -0.2, -0.8)); // snout
+    head.add(box(0.16, 0.1, 0.04, 0xdd66ff, -0.28, 0.12, -0.66));
+    head.add(box(0.16, 0.1, 0.04, 0xdd66ff, 0.28, 0.12, -0.66));
+    g.add(head);
+    const wingL = new THREE.Group();
+    wingL.position.set(-0.7, 0.4, -0.2);
+    wingL.add(box(3.4, 0.12, 2.2, grey, -1.7, 0, 0));
+    g.add(wingL);
+    const wingR = new THREE.Group();
+    wingR.position.set(0.7, 0.4, -0.2);
+    wingR.add(box(3.4, 0.12, 2.2, grey, 1.7, 0, 0));
+    g.add(wingR);
+    let tz = 1.8;
+    for (const s of [0.7, 0.55, 0.4]) {
+      g.add(box(s, s, 1.1, dark, 0, 0.1, tz));
+      tz += 1.0;
+    }
+    this.parts = { head, wingL, wingR };
+    this.mats = [];
+    g.traverse(o => {
+      if (o.isMesh) {
+        o.material = o.material.clone();
+        this.mats.push({ m: o.material, c: o.material.color.getHex() });
+      }
+    });
+    g.position.set(this.pos.x, this.pos.y, this.pos.z);
+    scene.add(g);
+  }
+
+  update(dt, ctx) {
+    if (this.dead) return;
+    const p = ctx.player;
+    this.attackCd -= dt;
+
+    let target;
+    if (this.state === 'circle') {
+      this.angle += dt * 0.28;
+      target = {
+        x: Math.cos(this.angle) * 26,
+        y: 47 + Math.sin(this.angle * 2.3) * 4,
+        z: Math.sin(this.angle) * 26,
+      };
+      this.swoopT -= dt;
+      // only hunt players who are over the island proper — the rim platform is safe
+      const overIsland = Math.hypot(p.pos.x, p.pos.z) < 44;
+      if (this.swoopT <= 0 && !p.dead && overIsland) {
+        this.state = 'swoop';
+        this.swoopTarget = { x: p.pos.x, y: p.pos.y + 1, z: p.pos.z };
+      }
+    } else {
+      target = this.swoopTarget;
+      const d = Math.hypot(target.x - this.pos.x, target.y - this.pos.y, target.z - this.pos.z);
+      if (d < 3 || p.dead) {
+        this.state = 'circle';
+        this.swoopT = 6 + Math.random() * 6;
+      }
+    }
+
+    const speed = this.state === 'swoop' ? 15 : 9;
+    const dx = target.x - this.pos.x, dy = target.y - this.pos.y, dz = target.z - this.pos.z;
+    const dl = Math.hypot(dx, dy, dz) || 1;
+    const blend = Math.min(1, 2.2 * dt);
+    this.vel.x += ((dx / dl) * speed - this.vel.x) * blend;
+    this.vel.y += ((dy / dl) * speed - this.vel.y) * blend;
+    this.vel.z += ((dz / dl) * speed - this.vel.z) * blend;
+    this.pos.x += this.vel.x * dt;
+    this.pos.y = Math.max(34, this.pos.y + this.vel.y * dt);
+    this.pos.z += this.vel.z * dt;
+
+    // wing-clip damage
+    const pd = Math.hypot(p.pos.x - this.pos.x, (p.pos.y + 0.9) - this.pos.y, p.pos.z - this.pos.z);
+    if (!p.dead && pd < 2.8 && this.attackCd <= 0) {
+      this.attackCd = 1.5;
+      p.damage(6, ctx.time, 'attack');
+      const kx = (p.pos.x - this.pos.x) / (pd || 1), kz = (p.pos.z - this.pos.z) / (pd || 1);
+      p.vel.x += kx * 14; p.vel.z += kz * 14; p.vel.y += 8;
+      if (ctx.sfx) ctx.sfx.hurt();
+    }
+
+    // orient along velocity, flap wings
+    this.yaw = Math.atan2(-this.vel.x, -this.vel.z);
+    this.flapT += dt * (this.state === 'swoop' ? 9 : 5);
+    const flap = Math.sin(this.flapT) * 0.55;
+    this.parts.wingL.rotation.z = -flap;
+    this.parts.wingR.rotation.z = flap;
+    this.group.position.set(this.pos.x, this.pos.y, this.pos.z);
+    this.group.rotation.y = this.yaw;
+
+    if (this.flashT > 0) {
+      this.flashT -= dt;
+      this.mats.forEach(({ m }) => m.color.setHex(0xff3333));
+      if (this.flashT <= 0) this.mats.forEach(({ m, c }) => m.color.setHex(c));
+    }
+  }
+
+  // generous hitbox for punches/swords
+  rayHit(ox, oy, oz, dx, dy, dz, maxT) {
+    return rayVsEntity(ox, oy, oz, dx, dy, dz,
+      { pos: { x: this.pos.x, y: this.pos.y - 1.3, z: this.pos.z }, half: 2.0, height: 2.6 }, maxT);
+  }
+
+  hurt(dmg, ctx) {
+    if (this.dead) return;
+    this.hp -= dmg;
+    this.flashT = 0.25;
+    if (ctx && ctx.particles) ctx.particles.burst(this.pos.x, this.pos.y, this.pos.z, [0.7, 0.25, 0.85], 8, 3);
+    if (this.hp <= 0) {
+      this.hp = 0;
+      this.dead = true;
+      if (this.onDeath) this.onDeath();
+    }
+  }
+
+  dispose() {
+    this.scene.remove(this.group);
+    this.group.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
   }
 }

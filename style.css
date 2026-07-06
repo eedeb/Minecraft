@@ -87,6 +87,28 @@ html, body {
   opacity: 0; transition: opacity 0.3s;
 }
 
+#bossbar {
+  position: absolute; top: 14px; left: 50%;
+  transform: translateX(-50%);
+  width: 340px; text-align: center;
+  display: none;
+}
+#bossbar.show { display: block; }
+#bossbar .boss-name {
+  color: #dd88ff; font-size: 13px; font-weight: bold;
+  text-shadow: 1px 1px 0 #000; margin-bottom: 4px; letter-spacing: 2px;
+}
+#bossbar .boss-track {
+  height: 10px; border: 2px solid #000;
+  background: rgba(30, 10, 40, 0.8);
+  box-shadow: inset 0 0 0 1px #553366;
+}
+#bossFill {
+  height: 100%; width: 100%;
+  background: linear-gradient(#e070ff, #9030c0);
+  transition: width 0.2s;
+}
+
 #blockname {
   position: absolute; bottom: 110px; left: 50%;
   transform: translateX(-50%);
