@@ -93,3 +93,46 @@ export class Furnaces {
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Chests: 27-slot containers keyed by position (village loot + player-built).
+
+export class Chests {
+  constructor() {
+    this.map = new Map(); // key -> {slots: Array(27)}
+  }
+
+  key(x, y, z) { return x + ',' + y + ',' + z; }
+
+  // Returns [state, isNew] — main fills loot on first open of worldgen chests.
+  get(key, create = false) {
+    let s = this.map.get(key);
+    if (!s && create) {
+      s = { slots: new Array(27).fill(null) };
+      this.map.set(key, s);
+      return [s, true];
+    }
+    return [s || null, false];
+  }
+
+  breakAt(key) {
+    const s = this.map.get(key);
+    this.map.delete(key);
+    return s ? s.slots.filter(Boolean) : [];
+  }
+
+  serialize() {
+    const out = [];
+    for (const [k, s] of this.map) {
+      out.push([k, s.slots.map(enc)]);
+    }
+    return out;
+  }
+
+  load(data) {
+    if (!Array.isArray(data)) return;
+    for (const [k, slots] of data) {
+      this.map.set(k, { slots: (slots || []).map(dec).concat(new Array(27).fill(null)).slice(0, 27) });
+    }
+  }
+}

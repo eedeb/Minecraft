@@ -31,13 +31,13 @@ export class Inventory {
   set(area, idx, s) { const a = this._arr(area); if (a) a[idx] = (s && s.n > 0) ? s : null; }
 
   // slot placement rules: armor slots only accept matching pieces,
-  // furnace output (idx 2) is take-only
+  // furnace output (idx 2) is take-only; chests (27 slots) accept anything
   _accepts(area, idx, id) {
     if (area === 'armor') {
       const it = ITEMS[id];
       return !!(it && it.kind === 'armor' && ARMOR_SLOTS.indexOf(it.slot) === idx);
     }
-    if (area === 'furn' && idx === 2) return false;
+    if (area === 'furn' && idx === 2 && this.container && this.container.slots.length === 3) return false;
     return true;
   }
 
@@ -216,10 +216,19 @@ export class Inventory {
     if (area !== 'inv') {
       targets = [...Array(36).keys()]; // out of craft/armor/furnace -> inventory
     } else {
-      // into an open furnace: smeltables to input, fuel to the fuel slot
+      // into an open container: furnace routes by purpose, chest takes anything
       if (this.container) {
-        if (SMELTING[s.id] !== undefined && this._moveInto('inv', idx, 'furn', 0)) { this._c(); return; }
-        if (FUEL[s.id] && this._moveInto('inv', idx, 'furn', 1)) { this._c(); return; }
+        const cs = this.container.slots;
+        if (cs.length === 3) {
+          if (SMELTING[s.id] !== undefined && this._moveInto('inv', idx, 'furn', 0)) { this._c(); return; }
+          if (FUEL[s.id] && this._moveInto('inv', idx, 'furn', 1)) { this._c(); return; }
+        } else {
+          for (let ci = 0; ci < cs.length; ci++) {
+            if (this._moveInto('inv', idx, 'furn', ci)) { this._c(); return; }
+          }
+          this._c();
+          return;
+        }
       }
       // auto-equip armor
       const it = ITEMS[s.id];

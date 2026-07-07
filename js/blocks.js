@@ -8,6 +8,7 @@ export const B = {
   WOOL: 16, CRAFTING_TABLE: 17, STONE_BRICK: 18, IRON_BLOCK: 19, DIAMOND_BLOCK: 20,
   ICE: 21, FURNACE: 22, LAVA: 23, OBSIDIAN: 24, PORTAL: 25, NETHERRACK: 26,
   END_FRAME: 27, END_FRAME_FILLED: 28, END_PORTAL: 29, END_STONE: 30, DRAGON_EGG: 31,
+  CHEST: 32, BED: 33,
 };
 
 export const TILE = {
@@ -18,6 +19,7 @@ export const TILE = {
   ICE: 24, FURNACE_FRONT: 25, FURNACE_TOP: 26, LAVA: 27,
   OBSIDIAN: 28, PORTAL: 29, NETHERRACK: 30,
   END_FRAME: 31, END_FRAME_FILLED: 32, END_PORTAL: 33, END_STONE: 34, DRAGON_EGG: 35,
+  CHEST: 36, BED_TOP: 37, BED_SIDE: 38,
 };
 
 // def: {name, top, bottom, side (tile ids), solid (collision), opaque (face culling), breakable}
@@ -57,6 +59,8 @@ def(B.END_FRAME_FILLED, 'Filled Portal Frame', TILE.END_FRAME_FILLED, TILE.END_F
 def(B.END_PORTAL, 'End Portal', TILE.END_PORTAL, TILE.END_PORTAL, TILE.END_PORTAL, { solid: false, opaque: false, breakable: false });
 def(B.END_STONE, 'End Stone', TILE.END_STONE, TILE.END_STONE, TILE.END_STONE);
 def(B.DRAGON_EGG, 'Dragon Egg', TILE.DRAGON_EGG, TILE.DRAGON_EGG, TILE.DRAGON_EGG);
+def(B.CHEST, 'Chest', TILE.PLANK, TILE.PLANK, TILE.CHEST);
+def(B.BED, 'Bed', TILE.BED_TOP, TILE.PLANK, TILE.BED_SIDE);
 
 export const isSolid = (id) => !!(BLOCKS[id] && BLOCKS[id].solid);
 export const isOpaque = (id) => !!(BLOCKS[id] && BLOCKS[id].opaque);
@@ -220,6 +224,23 @@ export function buildAtlas() {
     [TILE.DRAGON_EGG]: () => {
       if (rand() < 0.12) return [...jitter([110, 40, 160], 18), 255];
       return [...jitter([18, 12, 24], 7), 255];
+    },
+    [TILE.CHEST]: (x, y) => {
+      if (x === 0 || y === 0 || x === 15 || y === 15) return [...jitter([92, 66, 34], 6), 255];
+      if (y === 7 || y === 8) {
+        if (x >= 6 && x <= 9) return [...jitter([70, 70, 74], 8), 255]; // latch
+        return [...jitter([96, 70, 38], 6), 255];
+      }
+      return [...jitter([148, 110, 62], 8), 255];
+    },
+    [TILE.BED_TOP]: (x, y) => {
+      if (x === 0 || y === 0 || x === 15 || y === 15) return [...jitter([110, 30, 30], 8), 255];
+      if (y <= 4) return [...jitter([235, 235, 235], 8), 255]; // pillow
+      return [...jitter([178, 44, 44], 10), 255]; // blanket
+    },
+    [TILE.BED_SIDE]: (x, y) => {
+      if (y < 8) return [...jitter([178, 44, 44], 10), 255];
+      return [...jitter([158, 128, 79], 8), 255];
     },
   };
   const oreP = (tile) => (x, y) => {

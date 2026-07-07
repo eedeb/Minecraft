@@ -13,7 +13,7 @@ import { mulberry32 } from './noise.js';
 import { I, ITEMS, breakInfo, RECIPES, matchGrid, itemIcon, initItemIcons, itemDamage, maxStack, TIER_NAMES, SMELT_TIME } from './items.js';
 import { Inventory } from './inventory.js';
 import { DropManager } from './drops.js';
-import { Furnaces } from './furnace.js';
+import { Furnaces, Chests } from './furnace.js';
 
 const SAVE_KEY = 'webcraft_save_v1';
 const PREFS_KEY = 'webcraft_prefs_v1';
@@ -186,6 +186,9 @@ const isNewPlayer = !saved?.inventory;
 
 const furnaces = new Furnaces();
 if (saved?.furnaces) furnaces.load(saved.furnaces);
+const chests = new Chests();
+if (saved?.chests) chests.load(saved.chests);
+if (saved?.player?.spawn) player.spawn = { ...saved.player.spawn };
 if (saved?.player) {
   player.hunger = saved.player.hunger ?? 20;
   player.saturation = saved.player.saturation ?? 5;
@@ -735,6 +738,7 @@ const bossFillEl = document.getElementById('bossFill');
 const armorRowEl = document.getElementById('armorRow');
 const craftAreaEl = document.getElementById('craftArea');
 const furnacePanelEl = document.getElementById('furnacePanel');
+const chestPanelEl = document.getElementById('chestPanel');
 const furnInEl = document.getElementById('furnIn');
 const furnFuelEl = document.getElementById('furnFuel');
 const furnOutEl = document.getElementById('furnOut');
@@ -885,13 +889,43 @@ function throwFromSlot(area, idx, all) {
   if (take) { dropStacks([take]); sfx.pop(); }
 }
 
-function openInventory(mode = 'inv', furnaceKey = null) {
+// basic loot for untouched village chests, seeded by position
+function fillChestLoot(state, key) {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (Math.imul(h, 31) + key.charCodeAt(i)) | 0;
+  const rand = mulberry32(h ^ world.seed);
+  const table = [
+    [I.APPLE, 1, 3, 1], [I.COAL, 2, 5, 1], [I.IRON_INGOT, 1, 3, 0.7],
+    [I.STICK, 2, 6, 1], [B.PLANK, 2, 8, 1], [B.WOOL, 1, 3, 0.8],
+    [I.PORKCHOP, 1, 2, 0.6], [I.ENDER_PEARL, 1, 1, 0.15],
+    [I.IRON_PICK, 1, 1, 0.12], [I.IRON_SWORD, 1, 1, 0.12],
+  ];
+  const stacks = 3 + Math.floor(rand() * 3);
+  for (let i = 0; i < stacks; i++) {
+    const [id, min, max, chance] = table[Math.floor(rand() * table.length)];
+    if (rand() > chance) continue;
+    const slot = Math.floor(rand() * 27);
+    if (!state.slots[slot]) state.slots[slot] = { id, n: min + Math.floor(rand() * (max - min + 1)) };
+  }
+}
+
+function openInventory(mode = 'inv', contKey = null, contPos = null) {
   if (player.dead) return;
   if (mode === true) mode = 'table'; // legacy callers
   invOpen = true;
   invMode = mode;
   craftSize = mode === 'table' ? 3 : 2;
-  inventory.container = mode === 'furnace' ? furnaces.get(furnaceKey, true) : null;
+  inventory.container = null;
+  if (mode === 'furnace') {
+    inventory.container = furnaces.get(contKey, true);
+  } else if (mode === 'chest') {
+    const [state, isNew] = chests.get(contKey, true);
+    // worldgen chests (not placed by the player) start with loot
+    if (isNew && contPos && !world.hasEdit(contPos.x, contPos.y, contPos.z)) {
+      fillChestLoot(state, contKey);
+    }
+    inventory.container = state;
+  }
   invScreen.classList.add('show');
   renderInvScreen();
   if (locked) document.exitPointerLock();
@@ -1144,11 +1178,17 @@ function renderInvScreen() {
   slotEls.clear();
 
   const furnaceMode = invMode === 'furnace';
-  craftAreaEl.style.display = furnaceMode ? 'none' : 'flex';
+  const chestMode = invMode === 'chest';
+  craftAreaEl.style.display = (furnaceMode || chestMode) ? 'none' : 'flex';
   furnacePanelEl.style.display = furnaceMode ? 'flex' : 'none';
-  if (recipesColEl) recipesColEl.style.display = furnaceMode ? 'none' : '';
+  chestPanelEl.style.display = chestMode ? 'grid' : 'none';
+  if (recipesColEl) recipesColEl.style.display = (furnaceMode || chestMode) ? 'none' : '';
 
-  if (furnaceMode) {
+  if (chestMode) {
+    craftTitleEl.textContent = 'Chest';
+    chestPanelEl.innerHTML = '';
+    for (let i = 0; i < 27; i++) chestPanelEl.appendChild(makeSlotEl('furn', i));
+  } else if (furnaceMode) {
     craftTitleEl.textContent = 'Furnace';
     furnInEl.innerHTML = ''; furnFuelEl.innerHTML = ''; furnOutEl.innerHTML = '';
     furnInEl.appendChild(makeSlotEl('furn', 0));
@@ -1484,9 +1524,22 @@ function finishBreak(hit, info) {
     const d = info.drop(Math.random());
     if (d) drops.spawn(d[0], d[1], hit.x + 0.5, hit.y + 0.35, hit.z + 0.5);
   }
-  // a broken furnace spills its contents
+  // broken containers spill their contents
   if (hit.id === B.FURNACE) {
     for (const s of furnaces.breakAt(dimPrefix() + furnaces.key(hit.x, hit.y, hit.z))) {
+      drops.spawn(s.id, s.n, hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, { stack: true });
+    }
+  }
+  if (hit.id === B.CHEST) {
+    const ck = dimPrefix() + chests.key(hit.x, hit.y, hit.z);
+    let spill = chests.breakAt(ck);
+    if (!spill.length && !world.hasEdit(hit.x, hit.y, hit.z)) {
+      // never-opened village chest: roll its loot so breaking doesn't waste it
+      const tmp = { slots: new Array(27).fill(null) };
+      fillChestLoot(tmp, ck);
+      spill = tmp.slots.filter(Boolean);
+    }
+    for (const s of spill) {
       drops.spawn(s.id, s.n, hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, { stack: true });
     }
   }
@@ -1653,6 +1706,26 @@ function useHeld() {
       openInventory('furnace', dimPrefix() + furnaces.key(hit.x, hit.y, hit.z));
       return;
     }
+    if (hit.id === B.CHEST) {
+      placingHeld = false;
+      openInventory('chest', dimPrefix() + chests.key(hit.x, hit.y, hit.z), { x: hit.x, y: hit.y, z: hit.z });
+      return;
+    }
+    if (hit.id === B.BED) {
+      placingHeld = false;
+      if (dim !== 'overworld') { toast('You can only sleep in the overworld'); return; }
+      player.spawn = { x: hit.x + 0.5, y: hit.y + 1.02, z: hit.z + 0.5 };
+      if (daylight < 0.3) {
+        timeOfDay = 0.02; // dawn
+        toast('You sleep through the night… spawn point set', 2.5);
+        sfx.portal();
+      } else {
+        toast('Spawn point set — you can sleep here at night', 2);
+        sfx.place();
+      }
+      save();
+      return;
+    }
   }
   const id = heldId();
   const it = ITEMS[id];
@@ -1721,7 +1794,59 @@ function useHeld() {
       sfx.place();
       if (!checkEndPortalComplete(hit.x, hit.y, hit.z)) toast('The eye locks into the frame…', 1.4);
     } else {
-      toast('Socket it into an End portal frame', 1.4);
+      // the eye flies toward the stronghold
+      if (dim !== 'overworld') { toast('The eye lies still — it seeks something in the overworld', 2); return; }
+      swingT = 0;
+      const sh = worldOver.stronghold;
+      const dx = sh.x - player.pos.x, dz = sh.z - player.pos.z;
+      const dist = Math.hypot(dx, dz);
+      launchEyeFlight(dx, dz, dist);
+      if (dist < 12) toast('The eye plunges downward — dig beneath you!', 2.5);
+      else toast(`The eye streaks ${compassDir(dx, dz)} — about ${Math.round(dist)} blocks`, 2.5);
+      sfx.pop();
+    }
+  }
+}
+
+function compassDir(dx, dz) {
+  const dirs = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+  const a = (Math.atan2(dx, -dz) + Math.PI * 2) % (Math.PI * 2);
+  return dirs[Math.round(a / (Math.PI / 4)) % 8];
+}
+
+// visual eye-of-ender flight: drifts toward the stronghold, then pops
+const eyeFlights = [];
+function launchEyeFlight(dx, dz, dist) {
+  const eye = player.eye();
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.35, 0.35),
+    new THREE.MeshBasicMaterial({ map: itemTexture(I.EYE_OF_ENDER), transparent: true, alphaTest: 0.1, side: THREE.DoubleSide })
+  );
+  mesh.position.set(eye.x, eye.y, eye.z);
+  scene.add(mesh);
+  const l = Math.hypot(dx, dz) || 1;
+  eyeFlights.push({
+    pos: { x: eye.x, y: eye.y, z: eye.z },
+    vel: dist < 12
+      ? { x: 0, y: -5, z: 0 }                                // points straight down when on top of it
+      : { x: (dx / l) * 9, y: 2.2, z: (dz / l) * 9 },
+    ttl: 1.8, mesh,
+  });
+}
+
+function updateEyeFlights(dt) {
+  for (let i = eyeFlights.length - 1; i >= 0; i--) {
+    const e = eyeFlights[i];
+    e.ttl -= dt;
+    e.vel.y -= 1.2 * dt;
+    e.pos.x += e.vel.x * dt; e.pos.y += e.vel.y * dt; e.pos.z += e.vel.z * dt;
+    e.mesh.position.set(e.pos.x, e.pos.y, e.pos.z);
+    e.mesh.rotation.y += dt * 5;
+    if (e.ttl <= 0) {
+      particles.burst(e.pos.x, e.pos.y, e.pos.z, [0.5, 0.95, 0.7], 14, 2.5);
+      scene.remove(e.mesh);
+      e.mesh.geometry.dispose();
+      eyeFlights.splice(i, 1);
     }
   }
 }
@@ -1819,9 +1944,10 @@ function save() {
       dragonDefeated,
       portals: { overworld: dims.overworld.portals, nether: dims.nether.portals },
       timeOfDay,
-      player: { pos: player.pos, yaw: player.yaw, pitch: player.pitch, hp: player.hp, hunger: player.hunger, saturation: player.saturation, sel: selected },
+      player: { pos: player.pos, spawn: player.spawn, yaw: player.yaw, pitch: player.pitch, hp: player.hp, hunger: player.hunger, saturation: player.saturation, sel: selected },
       inventory: inventory.serialize(),
       furnaces: furnaces.serialize(),
+      chests: chests.serialize(),
       edits,
     }));
   } catch (e) { /* storage full or unavailable */ }
@@ -1854,7 +1980,7 @@ function frame(dt) {
 
   // singleplayer: the world pauses while the inventory is open —
   // except the furnace UI, which runs in real time like Minecraft containers
-  const paused = invOpen && invMode !== 'furnace';
+  const paused = invOpen && invMode !== 'furnace' && invMode !== 'chest'; // containers run in real time
   if ((started || forceStarted) && !paused) {
     player.update(dt, isLocked() ? keys : new Set(), time);
     mobs.update(dt, { world, player, daylight, time, sfx, particles, drops });
@@ -1862,6 +1988,7 @@ function frame(dt) {
     if (furnaces.tick(dt) && invOpen && invMode === 'furnace') renderInvScreen();
     if (dim === 'end' && dragon && !dragon.dead) dragon.update(dt, { player, time, sfx, particles });
     updatePearls(dt);
+    updateEyeFlights(dt);
     updateMining(dt);
 
     // held-repeat placing / eating
@@ -2029,6 +2156,9 @@ window.__game = {
   switchDimension, setDimension, tryLightPortal, dims,
   enterEnd, leaveEnd, checkEndPortalComplete, throwPearl,
   getDragon: () => dragon,
+  chests, fillChestLoot,
+  getStronghold: () => worldOver.stronghold,
+  villageInfo: (gx, gz) => worldOver.villageInfo(gx, gz),
   isDragonDefeated: () => dragonDefeated,
   setDragonDefeated: (v) => { dragonDefeated = !!v; },
   respawnDragon: () => { if (!dragon) { dragon = new Dragon(scene); dragon.onDeath = onDragonDeath; dragon.group.visible = dim === 'end'; } },

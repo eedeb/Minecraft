@@ -18,7 +18,9 @@ A 3D Minecraft clone that runs entirely in the browser. No build step, no depend
 - **Obsidian & nether portals** — pour water on lava to make obsidian (diamond pickaxe to mine), build a portal frame, light it with flint and steel (iron + coal), and step through
 - **The Nether** — a cavernous netherrack dimension with a lava ocean and **blazes** that hover and hurl fireballs; distance scales 1:8, and blaze rods make great furnace fuel
 - **Ender pearls & endermen** — tall, night-spawning endermen drop pearls and teleport away when struck; throw pearls (right-click) to teleport yourself
-- **The End & the Ender Dragon** — craft End portal frames (obsidian + pearl), build the 12-frame ring, and socket an **Eye of Ender** into each (blaze rod → blaze powder; powder + pearl → eye); drop through to a floating end-stone island where the **Ender Dragon** circles the obsidian pillars and swoops at you; slay it to open the exit portal and claim the dragon egg
+- **Villages** — plank cabins generate on the plains with **loot chests** (tools, food, materials, the occasional ender pearl); chests are also craftable (8 planks) for storage
+- **Beds** — craft one from 3 wool + 3 planks; right-click to set your spawn point, and sleep through the night
+- **The stronghold & the End** — a hidden underground chamber holds the dormant End portal; throw **Eyes of Ender** (right-click) and follow their flight to find it, then socket 12 eyes into the frame ring (blaze rod → blaze powder; powder + pearl → eye); drop through to a floating end-stone island where the **Ender Dragon** circles the obsidian pillars and swoops at you; slay it to open the exit portal and claim the dragon egg
 - **Critical hits** — attack while falling for 1.5× damage with a spark burst, just like Minecraft (jump, then swing on the way down)
 - **Day/night cycle** — moving sun and moon, stars, sunsets, and fog that matches the sky
 - **Survival elements** — health, fall damage, zombie attacks with knockback, death & respawn

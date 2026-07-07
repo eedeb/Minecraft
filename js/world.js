@@ -38,6 +38,18 @@ export class World {
     this.pCave1 = new Perlin(this.seed + 202);
     this.pCave2 = new Perlin(this.seed + 303);
     this._frame = 0;
+    // one stronghold per overworld, a few hundred blocks out
+    if (dim === 'overworld') {
+      const a = hash2(this.seed, 991, this.seed) * Math.PI * 2;
+      const d = 350 + hash2(this.seed, 177, this.seed) * 250;
+      this.stronghold = { x: Math.round(Math.cos(a) * d), z: Math.round(Math.sin(a) * d), y: 21 };
+    }
+  }
+
+  hasEdit(x, y, z) {
+    const cx = Math.floor(x / CHUNK), cz = Math.floor(z / CHUNK);
+    const ce = this.edits.get(key(cx, cz));
+    return !!(ce && ce.has((x - cx * CHUNK) + ',' + y + ',' + (z - cz * CHUNK)));
   }
 
   // --- terrain shape -------------------------------------------------------
@@ -229,6 +241,10 @@ export class World {
       }
     }
 
+    // structures (villages, stronghold), then player edits on top
+    this.genVillages(data, cx, cz);
+    this.genStronghold(data, cx, cz);
+
     // player edits
     const ce = this.edits.get(key(cx, cz));
     if (ce) {
@@ -239,6 +255,103 @@ export class World {
       }
     }
     return data;
+  }
+
+  // --- structures ------------------------------------------------------------
+
+  // Deterministic village layout for a 320-block grid cell (or null).
+  villageInfo(gx, gz) {
+    if (hash2(gx, gz, this.seed ^ 0x7a11) > 0.42) return null;
+    const cx = gx * 320 + 60 + Math.floor(hash2(gx, gz, this.seed + 3) * 200);
+    const cz = gz * 320 + 60 + Math.floor(hash2(gx, gz, this.seed + 7) * 200);
+    const c = this.columnInfo(cx, cz);
+    if (c.desert || c.snowy || c.h < SEA + 2 || c.h > 50) return null;
+    const houses = [];
+    const spots = [[0, 0], [-13, -11], [11, -13], [-12, 12], [13, 11]];
+    for (let i = 0; i < spots.length; i++) {
+      const hx = cx + spots[i][0] + Math.floor(hash2(gx * 5 + i, gz, this.seed + 11) * 5) - 2;
+      const hz = cz + spots[i][1] + Math.floor(hash2(gx, gz * 5 + i, this.seed + 13) * 5) - 2;
+      const hc = this.columnInfo(hx, hz);
+      if (hc.desert || hc.snowy || hc.h < SEA + 2 || Math.abs(hc.h - c.h) > 5) continue;
+      houses.push({ x: hx, z: hz, y: hc.h, chest: houses.length === 0 });
+    }
+    return houses.length >= 2 ? { x: cx, z: cz, houses } : null;
+  }
+
+  genVillages(data, cx, cz) {
+    const set = (wx, y, wz, id) => {
+      const lx = wx - cx * CHUNK, lz = wz - cz * CHUNK;
+      if (lx < 0 || lx >= CHUNK || lz < 0 || lz >= CHUNK || y < 0 || y >= HEIGHT) return;
+      data[lx + lz * CHUNK + y * CHUNK * CHUNK] = id;
+    };
+    const minGX = Math.floor(cx * CHUNK / 320), maxGX = Math.floor((cx * CHUNK + 15) / 320);
+    const minGZ = Math.floor(cz * CHUNK / 320), maxGZ = Math.floor((cz * CHUNK + 15) / 320);
+    for (let gx = minGX - 1; gx <= maxGX + 1; gx++) {
+      for (let gz = minGZ - 1; gz <= maxGZ + 1; gz++) {
+        const v = this.villageInfo(gx, gz);
+        if (!v) continue;
+        for (const h of v.houses) {
+          // skip houses that can't touch this chunk (footprint radius 3)
+          if (h.x + 3 < cx * CHUNK || h.x - 3 > cx * CHUNK + 15) continue;
+          if (h.z + 3 < cz * CHUNK || h.z - 3 > cz * CHUNK + 15) continue;
+          this.buildHouse(set, h.x, h.y, h.z, h.chest);
+        }
+      }
+    }
+  }
+
+  // Simple 5x5 plank cabin: log corners, glass windows, open doorway, chest.
+  buildHouse(set, hx, hy, hz, withChest) {
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dz = -2; dz <= 2; dz++) {
+        // foundation + floor
+        for (let y = hy - 3; y < hy; y++) set(hx + dx, y, hz + dz, B.COBBLE);
+        set(hx + dx, hy, hz + dz, B.PLANK);
+        const edgeX = Math.abs(dx) === 2, edgeZ = Math.abs(dz) === 2;
+        for (let dy = 1; dy <= 3; dy++) {
+          let id = B.AIR; // clear the interior (trees, hills…)
+          if (edgeX && edgeZ) id = B.LOG;
+          else if (edgeX || edgeZ) id = B.PLANK;
+          set(hx + dx, hy + dy, hz + dz, id);
+        }
+        set(hx + dx, hy + 4, hz + dz, B.PLANK); // roof
+      }
+    }
+    // doorway on the south face, windows on east/west
+    set(hx, hy + 1, hz - 2, B.AIR);
+    set(hx, hy + 2, hz - 2, B.AIR);
+    set(hx - 2, hy + 2, hz, B.GLASS);
+    set(hx + 2, hy + 2, hz, B.GLASS);
+    if (withChest) set(hx + 1, hy + 1, hz + 1, B.CHEST);
+  }
+
+  genStronghold(data, cx, cz) {
+    if (!this.stronghold) return;
+    const { x: sx, z: sz } = this.stronghold;
+    if (sx + 6 < cx * CHUNK || sx - 6 > cx * CHUNK + 15) return;
+    if (sz + 6 < cz * CHUNK || sz - 6 > cz * CHUNK + 15) return;
+    const set = (wx, y, wz, id) => {
+      const lx = wx - cx * CHUNK, lz = wz - cz * CHUNK;
+      if (lx < 0 || lx >= CHUNK || lz < 0 || lz >= CHUNK || y < 0 || y >= HEIGHT) return;
+      data[lx + lz * CHUNK + y * CHUNK * CHUNK] = id;
+    };
+    // stone-brick chamber, y20 floor to y26 ceiling
+    for (let dx = -6; dx <= 6; dx++) {
+      for (let dz = -6; dz <= 6; dz++) {
+        for (let y = 20; y <= 26; y++) {
+          const shell = Math.abs(dx) === 6 || Math.abs(dz) === 6 || y === 20 || y === 26;
+          set(sx + dx, y, sz + dz, shell ? B.STONE_BRICK : B.AIR);
+        }
+      }
+    }
+    // the dormant End portal ring (interior 3x3 at sx-1..sx+1)
+    const ox = sx - 1, oz = sz - 1;
+    for (let i = 0; i < 3; i++) {
+      set(ox - 1, 21, oz + i, B.END_FRAME);
+      set(ox + 3, 21, oz + i, B.END_FRAME);
+      set(ox + i, 21, oz - 1, B.END_FRAME);
+      set(ox + i, 21, oz + 3, B.END_FRAME);
+    }
   }
 
   // --- chunk/block access --------------------------------------------------

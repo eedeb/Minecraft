@@ -165,9 +165,10 @@ export const MINING = {
   [B.OBSIDIAN]: { hand: 150, tool: 'pickaxe', tier: 4, drop: () => [B.OBSIDIAN, 1] }, // diamond pick: ~9.4s
   [B.NETHERRACK]: { hand: 2, tool: 'pickaxe', tier: 1, drop: () => [B.NETHERRACK, 1] },
   [B.END_STONE]: { hand: 5, tool: 'pickaxe', tier: 1, drop: () => [B.END_STONE, 1] },
-  [B.END_FRAME]: { hand: 22, tool: 'pickaxe', tier: 3, drop: () => [B.END_FRAME, 1] },
-  [B.END_FRAME_FILLED]: { hand: 22, tool: 'pickaxe', tier: 3, drop: () => [B.END_FRAME, 1] },
+  // End portal frames are indestructible — they generate in the stronghold
   [B.DRAGON_EGG]: { hand: 1.5, tool: null, tier: 0, drop: () => [B.DRAGON_EGG, 1] },
+  [B.CHEST]: { hand: 2.5, tool: 'axe', tier: 0, drop: () => [B.CHEST, 1] },
+  [B.BED]: { hand: 1.0, tool: null, tier: 0, drop: () => [B.BED, 1] },
   [B.STONE_BRICK]: { hand: 7.5, tool: 'pickaxe', tier: 1, drop: () => [B.STONE_BRICK, 1] },
   [B.IRON_BLOCK]: { hand: 15, tool: 'pickaxe', tier: 2, drop: () => [B.IRON_BLOCK, 1] },
   [B.DIAMOND_BLOCK]: { hand: 15, tool: 'pickaxe', tier: 3, drop: () => [B.DIAMOND_BLOCK, 1] },
@@ -243,7 +244,8 @@ export const RECIPES = [
   ...toolRecipes,
   shaped(I.BUCKET, 1, ['I.I', '.I.'], { I: I.IRON_INGOT }),
   shapeless(I.FLINT_STEEL, 1, [I.IRON_INGOT, I.COAL]),
-  shaped(B.END_FRAME, 1, ['.P.', 'OOO'], { P: I.ENDER_PEARL, O: B.OBSIDIAN }),
+  shaped(B.CHEST, 1, ['PPP', 'P.P', 'PPP'], { P: B.PLANK }),
+  shaped(B.BED, 1, ['WWW', 'PPP'], { W: B.WOOL, P: B.PLANK }),
   shapeless(I.BLAZE_POWDER, 2, [I.BLAZE_ROD]),
   shapeless(I.EYE_OF_ENDER, 1, [I.ENDER_PEARL, I.BLAZE_POWDER]),
   ...armorRecipes,
