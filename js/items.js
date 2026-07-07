@@ -18,6 +18,7 @@ export const I = {
   DIAMOND_HELMET: 138, DIAMOND_CHEST: 139, DIAMOND_LEGS: 140, DIAMOND_BOOTS: 141,
   FLINT_STEEL: 142, BLAZE_ROD: 143, ENDER_PEARL: 144,
   BLAZE_POWDER: 145, EYE_OF_ENDER: 146,
+  STRING: 147, BOW: 148, ARROW: 149,
 };
 
 export const ARMOR_SLOTS = ['head', 'chest', 'legs', 'feet'];
@@ -58,6 +59,9 @@ ITEMS[I.BLAZE_ROD] = mat('Blaze Rod', 'material');
 ITEMS[I.ENDER_PEARL] = mat('Ender Pearl', 'pearl', { stack: 16 }); // right-click to throw & teleport
 ITEMS[I.BLAZE_POWDER] = mat('Blaze Powder', 'material');
 ITEMS[I.EYE_OF_ENDER] = mat('Eye of Ender', 'eye'); // sockets into End portal frames
+ITEMS[I.STRING] = mat('String', 'material'); // dropped by spiders
+ITEMS[I.BOW] = mat('Bow', 'bow', { stack: 1 }); // right-click to shoot arrows
+ITEMS[I.ARROW] = mat('Arrow', 'material');
 ITEMS[I.BUCKET] = mat('Bucket', 'bucket', { liquid: null, stack: 1 });
 ITEMS[I.WATER_BUCKET] = mat('Water Bucket', 'bucket', { liquid: 'water', stack: 1 });
 ITEMS[I.LAVA_BUCKET] = mat('Lava Bucket', 'bucket', { liquid: 'lava', stack: 1 });
@@ -248,6 +252,8 @@ export const RECIPES = [
   ...toolRecipes,
   shaped(I.BUCKET, 1, ['I.I', '.I.'], { I: I.IRON_INGOT }),
   shapeless(I.FLINT_STEEL, 1, [I.IRON_INGOT, I.COAL]),
+  shaped(I.BOW, 1, ['.ST', 'S.T', '.ST'], { S: I.STICK, T: I.STRING }),
+  shaped(I.ARROW, 4, ['..S', '.S.', 'S..'], { S: I.STICK }),
   shaped(B.CHEST, 1, ['PPP', 'P.P', 'PPP'], { P: B.PLANK }),
   shaped(B.BED, 1, ['WWW', 'PPP'], { W: B.WOOL, P: B.PLANK }),
   shapeless(I.BLAZE_POWDER, 2, [I.BLAZE_ROD]),
@@ -486,6 +492,30 @@ ITEM_STENCILS[I.EYE_OF_ENDER] = {
     '...dmmmmd...', '....dddd....', '............', '............',
   ],
   pal: { m: '#3a8a5e', d: '#1e4a34', g: '#84e8b8', G: '#0a1410' },
+};
+ITEM_STENCILS[I.STRING] = {
+  rows: [
+    '............', '...ssss.....', '..s....s....', '.s......s...',
+    '.s......s...', '.d......s...', '.d.....s....', '..d...s.....',
+    '...ddd......', '......s.....', '.......s....', '............',
+  ],
+  pal: { s: '#e8e8e8', d: '#c2c2c2' },
+};
+ITEM_STENCILS[I.BOW] = {
+  rows: [
+    '.....mmms...', '...mm...s...', '..m.....s...', '.m......s...',
+    '.m......s...', '.d......s...', '.d......s...', '.m......s...',
+    '.m......s...', '..m.....s...', '...mm...s...', '.....mmms...',
+  ],
+  pal: { m: '#8a5d2e', d: '#6e4a24', s: '#e8e8e8' },
+};
+ITEM_STENCILS[I.ARROW] = {
+  rows: [
+    '.........tt.', '........ttt.', '.......htt..', '......hh....',
+    '.....hh.....', '....hh......', '...hh.......', '..hh........',
+    '.fhf........', '.ff.........', 'f.f.........', '............',
+  ],
+  pal: { t: '#c8c8c8', h: '#8a5d2e', f: '#f0f0f0' },
 };
 ITEM_STENCILS[I.BLAZE_ROD] = {
   rows: [

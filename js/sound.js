@@ -37,5 +37,6 @@ export const sfx = {
   mine: () => tone('square', 140 + Math.random() * 50, 100, 0.04, 0.05),
   fireball: () => tone('sawtooth', 900, 200, 0.3, 0.1),
   crit: () => { tone('square', 320, 900, 0.1, 0.14); setTimeout(() => tone('square', 500, 1200, 0.08, 0.1), 40); },
+  bow: () => { tone('sawtooth', 180, 700, 0.14, 0.1); tone('square', 90, 420, 0.1, 0.05); },
   portal: () => { tone('sine', 120, 480, 0.8, 0.15); setTimeout(() => tone('sine', 480, 90, 0.6, 0.12), 300); },
 };

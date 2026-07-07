@@ -12,6 +12,7 @@ const DROP_TABLE = {
   sheep: [[B.WOOL, 1, 2], [I.MUTTON, 1, 1]],
   cow: [[I.BEEF, 1, 2]],
   zombie: [[I.FLESH, 0, 2]],
+  spider: [[I.STRING, 0, 2]],
   blaze: [[I.BLAZE_ROD, 0, 1]],
   enderman: [[I.ENDER_PEARL, 1, 2]],
 };
@@ -23,6 +24,7 @@ const TYPES = {
   sheep: { hp: 8, speed: 1.5, half: 0.4, height: 1.0, color: 0xe8e8e8 },
   cow: { hp: 10, speed: 1.5, half: 0.4, height: 1.25, color: 0x6e4a2f },
   zombie: { hp: 20, speed: 2.7, half: 0.3, height: 1.8, color: 0x5da357, dmg: 3 },
+  spider: { hp: 16, speed: 2.9, half: 0.6, height: 0.9, color: 0x352a24, dmg: 2 },
   blaze: { hp: 20, speed: 1.6, half: 0.35, height: 1.6, color: 0xe8a428 },
   enderman: { hp: 40, speed: 3.4, half: 0.35, height: 2.9, color: 0xbb44dd, dmg: 5 },
 };
@@ -120,6 +122,30 @@ const MODELS = {
     g.add(rods);
     return { legs: [], head, rods };
   },
+  spider(g) {
+    const c = 0x2f2823, dark = 0x201a16;
+    const head = box(0.5, 0.4, 0.45, c, 0, 0.45, -0.55);
+    // two rows of glowing red eyes
+    head.add(box(0.08, 0.08, 0.02, 0xd83030, -0.15, 0.02, -0.235));
+    head.add(box(0.08, 0.08, 0.02, 0xd83030, 0.15, 0.02, -0.235));
+    head.add(box(0.06, 0.06, 0.02, 0x8a1616, -0.05, 0.1, -0.235));
+    head.add(box(0.06, 0.06, 0.02, 0x8a1616, 0.05, 0.1, -0.235));
+    g.add(head);
+    g.add(box(0.55, 0.4, 0.5, c, 0, 0.45, -0.1));    // thorax
+    g.add(box(0.75, 0.5, 0.95, dark, 0, 0.5, 0.55)); // abdomen
+    const legs = [];
+    for (let i = 0; i < 4; i++) {
+      const z = -0.35 + i * 0.22;
+      const l = leg(0.09, 0.5, dark, -0.3, 0.5, z);
+      const r = leg(0.09, 0.5, dark, 0.3, 0.5, z);
+      l.rotation.z = 0.5;  // splay outward
+      r.rotation.z = -0.5;
+      // interleave so adjacent legs swing in opposite phases
+      if (i % 2) legs.push(r, l); else legs.push(l, r);
+    }
+    legs.forEach(l => g.add(l));
+    return { legs, head };
+  },
   zombie(g) {
     const skin = 0x5da357, shirt = 0x2f7ba6, pants = 0x35506e;
     const legs = [
@@ -144,7 +170,7 @@ export class Mob {
     const t = TYPES[type];
     this.id = nextId++;
     this.type = type;
-    this.hostile = type === 'zombie' || type === 'blaze' || type === 'enderman';
+    this.hostile = type === 'zombie' || type === 'blaze' || type === 'enderman' || type === 'spider';
     this.flying = type === 'blaze';
     this.shootCd = 2 + Math.random() * 2;
     this.hp = t.hp;
@@ -212,8 +238,9 @@ export class Mob {
     } else if (this.hostile) {
       const dx = player.pos.x - this.pos.x, dz = player.pos.z - this.pos.z;
       const dist = Math.hypot(dx, dz);
-      // burn in daylight
-      if (daylight > 0.5) {
+      const spider = this.type === 'spider';
+      // burn in daylight (spiders don't burn — they just turn docile)
+      if (daylight > 0.5 && !spider) {
         this.burnT += dt;
         if (this.burnT > 0.4) {
           this.hp -= 3 * dt;
@@ -221,7 +248,9 @@ export class Mob {
           if (this.hp <= 0) this.dead = true;
         }
       }
-      if (!player.dead && !player.creative && dist < 24) {
+      // spiders are neutral in daylight unless already hurt
+      const docile = spider && daylight > 0.5 && this.hp >= TYPES.spider.hp;
+      if (!player.dead && !player.creative && !docile && dist < 24) {
         this.targetYaw = Math.atan2(-dx, -dz);
         wantSpeed = this.speed;
         const dy = Math.abs((player.pos.y) - this.pos.y);
@@ -361,6 +390,7 @@ export class MobManager {
     this.spawnT = 2;
     this.passiveCap = 8;
     this.zombieCap = 6;
+    this.spiderCap = 4;
     this.blazeCap = 5;
   }
 
@@ -483,11 +513,13 @@ export class MobManager {
     const night = daylight < 0.25;
     const passives = this.mobs.filter(m => !m.hostile).length;
     const zombies = this.mobs.filter(m => m.type === 'zombie').length;
+    const spiders = this.mobs.filter(m => m.type === 'spider').length;
     const endermen = this.mobs.filter(m => m.type === 'enderman').length;
 
     let type = null;
     if (night && Math.random() < 0.75) {
       if (endermen < 2 && Math.random() < 0.22) type = 'enderman';
+      else if (spiders < this.spiderCap && Math.random() < 0.35) type = 'spider';
       else if (zombies < this.zombieCap) type = 'zombie';
     } else if (passives < this.passiveCap) {
       type = ['pig', 'sheep', 'cow'][(Math.random() * 3) | 0];

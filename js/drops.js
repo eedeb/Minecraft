@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { moveEntity, isLavaAt } from './physics.js';
 import { ITEMS } from './items.js';
 
-const MAX_DROPS = 90;
+const MAX_DROPS = 150;
 const LIFETIME = 90;
 
 export class DropManager {
@@ -19,6 +19,7 @@ export class DropManager {
 
   // opts.stack: spawn one entity holding all n items (Q-drops)
   // opts.throwDir: initial velocity direction (thrown from the player)
+  // opts.ttl: seconds before despawn (death drops linger longer)
   // hide/show all drop meshes when the player switches dimension
   setActive(v) {
     for (const e of this.list) e.mesh.visible = v;
@@ -39,7 +40,8 @@ export class DropManager {
           ? { x: opts.throwDir.x * 4, y: opts.throwDir.y * 4 + 2, z: opts.throwDir.z * 4 }
           : { x: (Math.random() - 0.5) * 2.5, y: 2.5 + Math.random() * 1.5, z: (Math.random() - 0.5) * 2.5 },
         half: 0.12, height: 0.24,
-        age: 0, retry: opts.throwDir ? 1.2 : 0, spin: Math.random() * Math.PI * 2,
+        age: 0, ttl: opts.ttl || LIFETIME,
+        retry: opts.throwDir ? 1.2 : 0, spin: Math.random() * Math.PI * 2,
         mesh,
       };
       mesh.position.set(e.pos.x, e.pos.y, e.pos.z);
@@ -67,9 +69,9 @@ export class DropManager {
     const p = ctx.player;
     for (let i = this.list.length - 1; i >= 0; i--) {
       const e = this.list[i];
+      if (!this.world.hasDataAt(e.pos.x, e.pos.z)) continue; // unloaded: freeze (age too)
       e.age += dt;
-      if (e.age > LIFETIME) { this._remove(i); continue; }
-      if (!this.world.hasDataAt(e.pos.x, e.pos.z)) continue;
+      if (e.age > e.ttl) { this._remove(i); continue; }
 
       // magnet toward the player, pickup when close
       if (e.retry > 0) e.retry -= dt;
@@ -110,5 +112,24 @@ export class DropManager {
     this.scene.remove(e.mesh);
     if (e.mesh.geometry.type === 'PlaneGeometry') e.mesh.geometry.dispose();
     this.list.splice(i, 1);
+  }
+
+  // persist ground items across reloads (so death drops survive a refresh)
+  serialize() {
+    return this.list.map(e => [
+      e.id, e.n,
+      +e.pos.x.toFixed(1), +e.pos.y.toFixed(1), +e.pos.z.toFixed(1),
+      Math.round(e.age), e.ttl,
+    ]);
+  }
+
+  load(rows) {
+    for (const r of rows || []) {
+      if (!Array.isArray(r) || !ITEMS[r[0]] || !(r[1] > 0)) continue;
+      this.spawn(r[0], r[1], r[2], r[3], r[4], { stack: true, ttl: r[6] });
+      const e = this.list[this.list.length - 1];
+      e.age = r[5] || 0;
+      e.vel = { x: 0, y: 0, z: 0 };
+    }
   }
 }

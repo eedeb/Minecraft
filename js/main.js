@@ -195,6 +195,9 @@ if (saved?.player) {
   player.hunger = saved.player.hunger ?? 20;
   player.saturation = saved.player.saturation ?? 5;
 }
+// died, then quit before respawning: rejoin freshly respawned at the spawn
+// point (the scattered death drops are persisted separately)
+if (player.hp <= 0) player.respawn();
 
 // build ground under the player synchronously so we don't fall through
 {
@@ -316,6 +319,12 @@ const dropsByDim = {
   end: new DropManager(scene, worldEnd, dropResources),
 };
 let drops = dropsByDim[dim];
+if (saved?.drops) {
+  for (const d of ['overworld', 'nether', 'end']) {
+    dropsByDim[d].load(saved.drops[d]);
+    if (d !== dim) dropsByDim[d].setActive(false);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Dimensions & nether portals
@@ -631,6 +640,68 @@ function updatePearls(dt) {
   }
 }
 
+// --- arrows (shot from bows) -------------------------------------------------
+
+const ARROW_SPEED = 40;
+const ARROW_DMG = 6;
+const arrows = [];
+const arrowGeo = new THREE.BoxGeometry(0.06, 0.06, 0.5);
+const arrowMat = new THREE.MeshLambertMaterial({ color: 0x9a7040 });
+
+function shootArrow() {
+  const eye = player.eye();
+  const dir = player.forwardDir();
+  const mesh = new THREE.Mesh(arrowGeo, arrowMat);
+  mesh.position.set(eye.x, eye.y, eye.z);
+  scene.add(mesh);
+  arrows.push({
+    pos: { x: eye.x + dir.x * 0.4, y: eye.y - 0.12 + dir.y * 0.4, z: eye.z + dir.z * 0.4 },
+    vel: { x: dir.x * ARROW_SPEED, y: dir.y * ARROW_SPEED, z: dir.z * ARROW_SPEED },
+    ttl: 5, mesh,
+  });
+  sfx.bow();
+}
+
+function updateArrows(dt) {
+  for (let i = arrows.length - 1; i >= 0; i--) {
+    const a = arrows[i];
+    a.ttl -= dt;
+    a.vel.y -= 16 * dt;
+    const speed = Math.hypot(a.vel.x, a.vel.y, a.vel.z) || 1;
+    const nd = { x: a.vel.x / speed, y: a.vel.y / speed, z: a.vel.z / speed };
+    const step = speed * dt;
+    let gone = a.ttl <= 0;
+
+    // mobs (and the dragon) are checked along this frame's flight path
+    const mobHit = mobs.raycast(a.pos.x, a.pos.y, a.pos.z, nd.x, nd.y, nd.z, step);
+    if (mobHit) {
+      mobHit.mob.hurt(ARROW_DMG, nd.x * 0.5, nd.z * 0.5, { player, world, particles });
+      sfx.hit();
+      gone = true;
+    } else if (dim === 'end' && dragon && !dragon.dead
+      && dragon.rayHit(a.pos.x, a.pos.y, a.pos.z, nd.x, nd.y, nd.z, step) !== null) {
+      dragon.hurt(ARROW_DMG, { particles });
+      sfx.hit();
+      gone = true;
+    } else {
+      const nx = a.pos.x + a.vel.x * dt, ny = a.pos.y + a.vel.y * dt, nz = a.pos.z + a.vel.z * dt;
+      if (BLOCKS[world.getBlock(Math.floor(nx), Math.floor(ny), Math.floor(nz))].solid) {
+        drops.spawn(I.ARROW, 1, a.pos.x, a.pos.y, a.pos.z); // stuck arrows can be picked back up
+        sfx.place();
+        gone = true;
+      } else {
+        a.pos.x = nx; a.pos.y = ny; a.pos.z = nz;
+        a.mesh.position.set(nx, ny, nz);
+        a.mesh.lookAt(nx + nd.x, ny + nd.y, nz + nd.z);
+      }
+    }
+    if (gone) {
+      scene.remove(a.mesh);
+      arrows.splice(i, 1);
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Block highlight + crack overlay + held viewmodel
 
@@ -849,10 +920,23 @@ player.onDamage = () => {
   });
   sfx.hurt();
 };
+// survival death: everything you carried scatters where you fell
+// (5-minute despawn instead of the usual 90s, so you can run back for it)
+function scatterInventory() {
+  const stacks = [];
+  for (let i = 0; i < 36; i++) if (inventory.slots[i]) { stacks.push(inventory.slots[i]); inventory.slots[i] = null; }
+  for (let i = 0; i < 4; i++) if (inventory.armor[i]) { stacks.push(inventory.armor[i]); inventory.armor[i] = null; }
+  const p = player.pos;
+  for (const s of stacks) drops.spawn(s.id, s.n, p.x, p.y + 0.6, p.z, { stack: true, ttl: 300 });
+  inventory._c();
+}
+
 player.onDeath = () => {
-  closeInventory(false);
+  closeInventory(false); // returns crafting grid + cursor to the slots first
+  if (!isCreative()) scatterInventory();
   document.exitPointerLock();
   deathScreen.classList.add('show');
+  save();
 };
 
 document.getElementById('respawnBtn').addEventListener('click', () => {
@@ -927,7 +1011,7 @@ function fillChestLoot(state, key) {
   const table = [
     [I.APPLE, 1, 3, 1], [I.COAL, 2, 5, 1], [I.IRON_INGOT, 1, 3, 0.7],
     [I.STICK, 2, 6, 1], [B.PLANK, 2, 8, 1], [B.WOOL, 1, 3, 0.8],
-    [I.PORKCHOP, 1, 2, 0.6], [I.ENDER_PEARL, 1, 1, 0.15],
+    [I.PORKCHOP, 1, 2, 0.6], [I.STRING, 1, 4, 0.6], [I.ENDER_PEARL, 1, 1, 0.15],
     [I.IRON_PICK, 1, 1, 0.12], [I.IRON_SWORD, 1, 1, 0.12],
   ];
   const stacks = 3 + Math.floor(rand() * 3);
@@ -1908,6 +1992,14 @@ function useHeld() {
     swingT = 0;
     throwPearl();
     consumeHeld();
+  } else if (it.kind === 'bow') {
+    // arrows are ammo pulled from anywhere in the inventory (creative: infinite)
+    if (!isCreative() && !inventory.consume(I.ARROW, 1)) {
+      toast('No arrows — craft some from 3 sticks in a diagonal', 1.6);
+      return;
+    }
+    swingT = 0;
+    shootArrow();
   } else if (it.kind === 'eye') {
     // eyes of ender socket into End portal frames
     if (hit && hit.id === B.END_FRAME && hit.t < 5) {
@@ -2072,6 +2164,11 @@ function save() {
       inventory: inventory.serialize(),
       furnaces: furnaces.serialize(),
       chests: chests.serialize(),
+      drops: {
+        overworld: dropsByDim.overworld.serialize(),
+        nether: dropsByDim.nether.serialize(),
+        end: dropsByDim.end.serialize(),
+      },
       edits,
     }));
   } catch (e) { /* storage full or unavailable */ }
@@ -2112,6 +2209,7 @@ function frame(dt) {
     if (furnaces.tick(dt) && invOpen && invMode === 'furnace') renderInvScreen();
     if (dim === 'end' && dragon && !dragon.dead) dragon.update(dt, { player, time, sfx, particles });
     updatePearls(dt);
+    updateArrows(dt);
     updateEyeFlights(dt);
     updateMining(dt);
 
@@ -2119,7 +2217,8 @@ function frame(dt) {
     placeCd -= dt;
     if (placingHeld && placeCd <= 0) {
       useHeld();
-      placeCd = ITEMS[heldId()]?.kind === 'food' ? 0.7 : 0.25;
+      const hk = ITEMS[heldId()]?.kind;
+      placeCd = (hk === 'food' || hk === 'bow') ? 0.7 : 0.25;
     }
   }
 
@@ -2282,6 +2381,7 @@ window.__game = {
   getDim: () => dim,
   switchDimension, setDimension, tryLightPortal, dims,
   enterEnd, leaveEnd, checkEndPortalComplete, throwPearl,
+  shootArrow, arrows, scatterInventory,
   getDragon: () => dragon,
   chests, fillChestLoot,
   getStronghold: () => worldOver.stronghold,
