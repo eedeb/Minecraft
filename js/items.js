@@ -32,6 +32,10 @@ for (let id = 1; id < BLOCKS.length; id++) {
   if (!BLOCKS[id] || id === B.WATER || id === B.BEDROCK) continue;
   ITEMS[id] = { name: BLOCKS[id].name, kind: 'block' };
 }
+// water & bedrock are unobtainable in survival but placeable from the
+// creative palette
+ITEMS[B.WATER] = { name: BLOCKS[B.WATER].name, kind: 'block' };
+ITEMS[B.BEDROCK] = { name: BLOCKS[B.BEDROCK].name, kind: 'block' };
 
 const mat = (name, kind, extra = {}) => ({ name, kind, ...extra });
 ITEMS[I.STICK] = mat('Stick', 'material');

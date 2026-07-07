@@ -24,6 +24,7 @@ A 3D Minecraft clone that runs entirely in the browser. No build step, no depend
 - **Critical hits** — attack while falling for 1.5× damage with a spark burst, just like Minecraft (jump, then swing on the way down)
 - **Day/night cycle** — moving sun and moon, stars, sunsets, and fog that matches the sky
 - **Survival elements** — health, fall damage, zombie attacks with knockback, death & respawn
+- **Creative mode** — switch modes from the pause menu: fly (F or double-tap Space), invulnerability, no hunger, instant block breaking (even bedrock), infinite placement, and an all-blocks-and-items palette in the inventory; hostile mobs ignore you. Survival has no flying.
 - **Minecraft Java physics** — fixed 20-tick simulation with authentic per-tick gravity/friction formulas, 1.25-block floaty jumps, sprinting (double-tap W), sneaking with edge protection, slippery ice, view bobbing, and Minecraft's mouse sensitivity curve (adjustable on the pause screen)
 - **World persistence** — your edits, inventory, position, and time of day auto-save to `localStorage`
 - **Juice** — block-break particles, procedural sound effects, ambient-occlusion shading, held-item viewmodel, damage vignette
@@ -48,7 +49,7 @@ A 3D Minecraft clone that runs entirely in the browser. No build step, no depend
 
 In the inventory (Minecraft-style): **left-click** picks up / places / swaps stacks, **right-click** picks up half / places one, **drag** distributes a stack across slots (right-drag places one per slot), **shift-click** quick-moves between hotbar and inventory, **double-click** collects all matching items, **hover + 1–9** swaps with a hotbar slot, and clicking outside the panel throws the held stack. The game pauses while the inventory is open.
 | **1–9 / scroll** | Select hotbar slot |
-| **F** | Toggle flight |
+| **F / double-tap Space** | Toggle flight (creative mode only) |
 | **F3** | Debug overlay |
 | **Esc** | Pause / release mouse |
 

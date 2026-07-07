@@ -162,6 +162,8 @@ let dragon = null;
 
 const spawnPoint = worldOver.findSpawn();
 const player = new Player(world, spawnPoint);
+player.gameMode = saved?.gameMode === 'creative' ? 'creative' : 'survival';
+const isCreative = () => player.gameMode === 'creative';
 if (saved && saved.player) {
   player.pos = { ...saved.player.pos };
   player.prevPos = { ...saved.player.pos };
@@ -745,6 +747,7 @@ const furnOutEl = document.getElementById('furnOut');
 const flameFillEl = document.getElementById('flameFill');
 const progFillEl = document.getElementById('progFill');
 const recipesColEl = document.querySelector('.inv-col.recipes');
+const recipesTitleEl = document.querySelector('.inv-col.recipes h2');
 document.getElementById('seedLabel').textContent = 'seed: ' + (seed >>> 0);
 
 let blockNameT = 0;
@@ -858,6 +861,33 @@ document.getElementById('respawnBtn').addEventListener('click', () => {
   ensureAround(player.pos.x, player.pos.z);
   deathScreen.classList.remove('show');
   canvas.requestPointerLock();
+});
+
+// ---------------------------------------------------------------------------
+// Game mode (survival / creative)
+
+const modeBtn = document.getElementById('modeBtn');
+
+function applyGameMode(mode, opts = {}) {
+  if (mode !== 'creative' && mode !== 'survival') return;
+  player.gameMode = mode;
+  const creative = mode === 'creative';
+  if (!creative) player.fly = false; // no flying in survival
+  else player.burnT = 0;
+  // creative hides the survival bars, like Minecraft
+  heartsEl.style.display = creative ? 'none' : '';
+  hungerEl.style.display = creative ? 'none' : '';
+  armorbarEl.style.display = creative ? 'none' : '';
+  modeBtn.textContent = creative ? '⚒ Mode: Creative' : '⚒ Mode: Survival';
+  if (invOpen) renderInvScreen(); // swap recipes <-> block palette
+  if (!opts.silent) {
+    toast(creative ? 'Creative mode — F to fly, E for all blocks' : 'Survival mode', 3);
+    save();
+  }
+}
+
+modeBtn.addEventListener('click', () => {
+  applyGameMode(isCreative() ? 'survival' : 'creative');
 });
 
 // ---------------------------------------------------------------------------
@@ -1246,30 +1276,92 @@ function renderInvScreen() {
   invHotbarRowEl.innerHTML = '';
   for (let i = 0; i < 9; i++) invHotbarRowEl.appendChild(makeSlotEl('inv', i));
 
-  // recipe reference list (click to move ingredients into the grid)
+  // right column: creative block palette, or the recipe reference list
   craftList.innerHTML = '';
-  for (const rec of RECIPES) {
-    const ok = rec.in.every(([id, n]) => inventory.count(id) >= n);
-    const row = document.createElement('div');
-    row.className = 'craft-row' + (ok ? '' : ' locked');
-    row.appendChild(iconCanvasFor(rec.out, 30));
-    const name = document.createElement('span');
-    name.className = 'c-name';
-    name.innerHTML = ITEMS[rec.out].name + (rec.n > 1 ? ` ×${rec.n}` : '') +
-      (rec.needsTable ? ' <span class="tag-table">table</span>' : '');
-    row.appendChild(name);
-    const ins = document.createElement('span');
-    ins.className = 'c-in';
-    ins.innerHTML = rec.in.map(([id, n]) =>
-      `<span class="${inventory.count(id) >= n ? 'have' : 'miss'}">${n}× ${ITEMS[id].name}</span>`
-    ).join(' + ');
-    row.appendChild(ins);
-    row.addEventListener('mousedown', (e) => { if (e.button === 0) autofillRecipe(rec); });
-    craftList.appendChild(row);
+  craftList.classList.toggle('palette', isCreative());
+  if (isCreative()) {
+    recipesTitleEl.innerHTML = 'All Blocks &amp; Items <span class="tip">click = stack · right = one · shift = to inventory</span>';
+    renderPalette();
+  } else {
+    recipesTitleEl.innerHTML = 'Recipes <span class="tip">click one to fill the grid</span>';
+    for (const rec of RECIPES) {
+      const ok = rec.in.every(([id, n]) => inventory.count(id) >= n);
+      const row = document.createElement('div');
+      row.className = 'craft-row' + (ok ? '' : ' locked');
+      row.appendChild(iconCanvasFor(rec.out, 30));
+      const name = document.createElement('span');
+      name.className = 'c-name';
+      name.innerHTML = ITEMS[rec.out].name + (rec.n > 1 ? ` ×${rec.n}` : '') +
+        (rec.needsTable ? ' <span class="tag-table">table</span>' : '');
+      row.appendChild(name);
+      const ins = document.createElement('span');
+      ins.className = 'c-in';
+      ins.innerHTML = rec.in.map(([id, n]) =>
+        `<span class="${inventory.count(id) >= n ? 'have' : 'miss'}">${n}× ${ITEMS[id].name}</span>`
+      ).join(' + ');
+      row.appendChild(ins);
+      row.addEventListener('mousedown', (e) => { if (e.button === 0) autofillRecipe(rec); });
+      craftList.appendChild(row);
+    }
   }
 
   renderCursorStack();
   updateTooltip();
+}
+
+// --- creative palette: every block & item, free of charge ------------------
+
+const PALETTE_IDS = Object.keys(ITEMS).map(Number).sort((a, b) => a - b);
+
+function paletteTip(el, text) {
+  el.addEventListener('mouseenter', () => {
+    tooltipEl.textContent = text;
+    tooltipEl.style.display = 'block';
+  });
+  el.addEventListener('mouseleave', () => updateTooltip());
+}
+
+function paletteClick(e, id) {
+  e.preventDefault();
+  const lim = maxStack(id);
+  if (e.button === 0 && e.shiftKey) {
+    const left = inventory.add(id, lim); // straight to the inventory
+    if (left === lim) return; // full — nothing moved, skip the re-render
+  } else if (e.button === 0) {
+    inventory.cursor = { id, n: lim }; // grab a full stack
+  } else if (e.button === 2) {
+    if (!inventory.cursor) inventory.cursor = { id, n: 1 };
+    else if (inventory.cursor.id === id) inventory.cursor.n = Math.min(lim, inventory.cursor.n + 1);
+    else return;
+  } else {
+    return;
+  }
+  sfx.pop();
+  inventory._c();
+}
+
+function renderPalette() {
+  const trash = document.createElement('div');
+  trash.className = 'inv-slot trash';
+  trash.textContent = '✕';
+  paletteTip(trash, 'Destroy the held stack');
+  trash.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    if (!inventory.cursor) return;
+    inventory.cursor = null;
+    sfx.break();
+    inventory._c();
+  });
+  craftList.appendChild(trash);
+
+  for (const id of PALETTE_IDS) {
+    const el = document.createElement('div');
+    el.className = 'inv-slot';
+    el.appendChild(iconCanvasFor(id, 36));
+    paletteTip(el, ITEMS[id].name);
+    el.addEventListener('mousedown', (e) => paletteClick(e, id));
+    craftList.appendChild(el);
+  }
 }
 
 inventory.onChange = () => {
@@ -1395,6 +1487,7 @@ document.addEventListener('mousemove', (e) => {
 });
 
 let lastWRelease = -1;
+let lastSpaceDown = -1;
 document.addEventListener('keydown', (e) => {
   if (invOpen) {
     if (e.code === 'KeyE' || e.code === 'Escape') {
@@ -1422,8 +1515,21 @@ document.addEventListener('keydown', (e) => {
     const now = performance.now() / 1000;
     if (now - lastWRelease < 0.35) player.wantSprint = true;
   }
+  // double-tap Space toggles creative flight, like Minecraft
+  if (e.code === 'Space' && !e.repeat) {
+    const now = performance.now() / 1000;
+    if (isCreative() && now - lastSpaceDown < 0.3) {
+      player.fly = !player.fly;
+      lastSpaceDown = -1; // consume the double-tap so a third press starts fresh
+    } else {
+      lastSpaceDown = now;
+    }
+  }
   keys.add(e.code);
-  if (e.code === 'KeyF') player.fly = !player.fly;
+  if (e.code === 'KeyF') {
+    if (isCreative()) player.fly = !player.fly;
+    else toast('Flying is creative-only', 1.2);
+  }
   if (e.code === 'F3') debugEl.classList.toggle('show');
   if (e.code === 'KeyE') openInventory();
   if (e.code === 'KeyQ') throwFromSlot('inv', selected, e.ctrlKey || e.metaKey); // drop held item
@@ -1513,6 +1619,7 @@ function currentTarget() {
 let mining = null; // {x,y,z,blockId,progress,total}
 let punchCd = 0;
 let miningParticleT = 0;
+let creativeBreakCd = 0;
 
 function stopMining() {
   mining = null;
@@ -1520,7 +1627,7 @@ function stopMining() {
 }
 
 function finishBreak(hit, info) {
-  if (info.canHarvest) {
+  if (info.canHarvest && !isCreative()) { // creative breaks drop nothing
     const d = info.drop(Math.random());
     if (d) drops.spawn(d[0], d[1], hit.x + 0.5, hit.y + 0.35, hit.z + 0.5);
   }
@@ -1568,6 +1675,7 @@ function finishBreak(hit, info) {
 
 function updateMining(dt) {
   punchCd -= dt;
+  creativeBreakCd -= dt;
   if (!breakingHeld || player.dead || invOpen) { stopMining(); return; }
 
   const eye = player.eye();
@@ -1619,6 +1727,18 @@ function updateMining(dt) {
   }
   if (!hit) { stopMining(); return; }
 
+  // creative: everything (even bedrock) breaks instantly
+  if (isCreative()) {
+    stopMining();
+    if (creativeBreakCd <= 0) {
+      creativeBreakCd = 0.22;
+      swingT = 0;
+      const info = breakInfo(hit.id, heldId());
+      finishBreak(hit, info || { canHarvest: false, drop: () => null });
+    }
+    return;
+  }
+
   const info = breakInfo(hit.id, heldId());
   if (!info) { stopMining(); return; } // bedrock etc.
 
@@ -1658,6 +1778,7 @@ function updateMining(dt) {
 
 // consume one item from the selected hotbar slot, optionally replacing it
 function consumeHeld(replacementId = null) {
+  if (isCreative()) return; // creative items are infinite
   const slot = inventory.slots[selected];
   if (!slot) return;
   slot.n--;
@@ -1737,13 +1858,15 @@ function useHeld() {
     if (py < 0 || py >= HEIGHT) return;
     const existing = world.getBlock(px, py, pz);
     if (existing !== B.AIR && existing !== B.WATER) return;
-    if (blockOverlapsEntity(px, py, pz, player)) return;
-    if (mobs.anyOverlapping(px, py, pz)) return;
+    // only solid blocks can't overlap entities (liquids can be placed at your feet)
+    if (BLOCKS[id].solid && (blockOverlapsEntity(px, py, pz, player) || mobs.anyOverlapping(px, py, pz))) return;
     if (!world.hasDataAt(px, pz)) return;
     swingT = 0;
     world.setBlock(px, py, pz, id);
     consumeHeld();
     sfx.place();
+    // creative-placed liquids still react with each other
+    if (id === B.WATER || id === B.LAVA) liquidContact(px, py, pz);
   } else if (it.kind === 'food') {
     if (player.hunger >= 20) { toast('Not hungry'); return; }
     swingT = 0;
@@ -1939,6 +2062,7 @@ function save() {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       seed: worldOver.seed,
       dim,
+      gameMode: player.gameMode,
       editsN,
       editsE,
       dragonDefeated,
@@ -2044,8 +2168,8 @@ function frame(dt) {
   // live furnace progress bars while its UI is open
   if (invOpen && invMode === 'furnace') updateFurnaceBars();
 
-  // burning vignette
-  fireOverlayEl.style.opacity = (player.inLava || player.burnT > 0) && !player.dead ? 0.75 : 0;
+  // burning vignette (creative players don't burn)
+  fireOverlayEl.style.opacity = (player.inLava || player.burnT > 0) && !player.dead && !isCreative() ? 0.75 : 0;
 
   // underwater overlay + fog (nether has its own closer fog)
   if (player.eyeInWater) {
@@ -2100,7 +2224,7 @@ function frame(dt) {
     debugEl.textContent =
       `FPS ${fpsSmooth.toFixed(0)}  |  XYZ ${player.pos.x.toFixed(1)} / ${player.pos.y.toFixed(1)} / ${player.pos.z.toFixed(1)}\n` +
       `chunks ${world.chunks.size}  mobs ${mobs.mobs.length}  drops ${drops.list.length}  time ${timeOfDay.toFixed(2)}  daylight ${daylight.toFixed(2)}\n` +
-      `seed ${world.seed >>> 0}  renderDist ${renderDist}  fly ${player.fly}`;
+      `seed ${world.seed >>> 0}  renderDist ${renderDist}  mode ${player.gameMode}  fly ${player.fly}`;
   }
 
   renderer.render(scene, camera);
@@ -2112,6 +2236,7 @@ if (dim === 'end' && !dragonDefeated) {
   dragon.onDeath = onDragonDeath;
 }
 
+applyGameMode(player.gameMode, { silent: true });
 renderHotbar();
 updateHeldItem();
 updateHearts();
@@ -2152,6 +2277,8 @@ window.__game = {
     else inventory.leftClick(area, idx);
   },
   suppressSave: () => { wipeSave = true; },
+  setGameMode: (m) => applyGameMode(m, { silent: true }),
+  getGameMode: () => player.gameMode,
   getDim: () => dim,
   switchDimension, setDimension, tryLightPortal, dims,
   enterEnd, leaveEnd, checkEndPortalComplete, throwPearl,

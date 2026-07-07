@@ -227,6 +227,13 @@ html, body {
 .inv-col h2 { font-size: 15px; margin: 10px 0 8px; color: #ffd76e; text-shadow: 1px 1px 0 #000; }
 .inv-col .tip { font-size: 10px; color: #999; font-weight: normal; margin-left: 6px; }
 #craftList { max-height: 340px; overflow-y: auto; }
+#craftList.palette {
+  display: grid; grid-template-columns: repeat(auto-fill, 42px); gap: 3px;
+  align-content: start;
+  padding-right: 4px;
+}
+.inv-slot.trash { color: #e07a6a; font-size: 20px; font-weight: bold; text-shadow: 1px 1px 0 #000; }
+.inv-slot.trash:hover { border-color: #e07a6a; }
 
 .slot-grid { display: grid; grid-template-columns: repeat(9, 42px); gap: 3px; }
 .slot-grid.hotbar-row { margin-top: 10px; }

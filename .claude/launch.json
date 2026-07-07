@@ -6,6 +6,12 @@
       "runtimeExecutable": "ruby",
       "runtimeArgs": ["-run", "-e", "httpd", ".", "-p", "8123", "-b", "127.0.0.1"],
       "port": 8123
+    },
+    {
+      "name": "webcraft-8124",
+      "runtimeExecutable": "ruby",
+      "runtimeArgs": ["-run", "-e", "httpd", ".", "-p", "8124", "-b", "127.0.0.1"],
+      "port": 8124
     }
   ]
 }

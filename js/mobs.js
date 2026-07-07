@@ -192,7 +192,7 @@ export class Mob {
       const dx = player.pos.x - this.pos.x, dz = player.pos.z - this.pos.z;
       const dist = Math.hypot(dx, dz);
       this.shootCd -= dt;
-      if (!player.dead && dist < 24) {
+      if (!player.dead && !player.creative && dist < 24) {
         this.targetYaw = Math.atan2(-dx, -dz);
         if (dist > 9) wantSpeed = this.speed;
         else if (dist < 5) wantSpeed = -this.speed * 0.5;
@@ -221,7 +221,7 @@ export class Mob {
           if (this.hp <= 0) this.dead = true;
         }
       }
-      if (!player.dead && dist < 24) {
+      if (!player.dead && !player.creative && dist < 24) {
         this.targetYaw = Math.atan2(-dx, -dz);
         wantSpeed = this.speed;
         const dy = Math.abs((player.pos.y) - this.pos.y);
@@ -392,7 +392,7 @@ export class MobManager {
       s.pos.x += s.vel.x * dt; s.pos.y += s.vel.y * dt; s.pos.z += s.vel.z * dt;
       s.mesh.position.set(s.pos.x, s.pos.y, s.pos.z);
       s.mesh.rotation.x += dt * 8; s.mesh.rotation.y += dt * 6;
-      const hitPlayer = !p.dead &&
+      const hitPlayer = !p.dead && !p.creative &&
         Math.abs(s.pos.x - p.pos.x) < 0.6 && Math.abs(s.pos.z - p.pos.z) < 0.6 &&
         s.pos.y > p.pos.y - 0.2 && s.pos.y < p.pos.y + 2.0;
       const b = ctx.world.getBlock(Math.floor(s.pos.x), Math.floor(s.pos.y), Math.floor(s.pos.z));
@@ -630,7 +630,7 @@ export class Dragon {
 
     // wing-clip damage
     const pd = Math.hypot(p.pos.x - this.pos.x, (p.pos.y + 0.9) - this.pos.y, p.pos.z - this.pos.z);
-    if (!p.dead && pd < 2.8 && this.attackCd <= 0) {
+    if (!p.dead && !p.creative && pd < 2.8 && this.attackCd <= 0) {
       this.attackCd = 1.5;
       p.damage(6, ctx.time, 'attack');
       const kx = (p.pos.x - this.pos.x) / (pd || 1), kz = (p.pos.z - this.pos.z) / (pd || 1);

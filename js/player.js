@@ -41,6 +41,7 @@ export class Player {
     this.stepHeight = 0.6;
     this.hp = 20;
     this.maxHp = 20;
+    this.gameMode = 'survival'; // 'survival' | 'creative'
     this.hunger = 20;      // 20 points = 10 drumsticks
     this.saturation = 5;
     this.exhaustion = 0;
@@ -69,6 +70,8 @@ export class Player {
     this.onDamage = null;
     this.onDeath = null;
   }
+
+  get creative() { return this.gameMode === 'creative'; }
 
   // Minecraft sensitivity: f = sens*0.6+0.2; radians = delta * f^3 * 8 * 0.15deg
   look(dx, dy) {
@@ -249,7 +252,9 @@ export class Player {
 
     // --- lava contact + after-burn fire ---
     this.lavaCd -= TICK; this.fireCd -= TICK;
-    if (this.inLava && !this.fly) {
+    if (this.creative) {
+      this.burnT = 0; // creative players don't catch fire
+    } else if (this.inLava && !this.fly) {
       this.burnT = 3;
       if (this.lavaCd <= 0) { this.lavaCd = 0.5; this.damage(2, time, 'lava'); }
     } else if (this.inWater) {
@@ -259,7 +264,13 @@ export class Player {
       if (this.fireCd <= 0) { this.fireCd = 1; this.damage(1, time, 'fire'); }
     }
 
-    // --- hunger ---
+    // --- hunger (frozen at full in creative) ---
+    if (this.creative) {
+      this.hunger = 20;
+      this.saturation = 20;
+      this.exhaustion = 0;
+      return;
+    }
     const distMoved = Math.hypot(this.pos.x - this.prevPos.x, this.pos.z - this.prevPos.z);
     if (this.sprinting && distMoved > 0.001) this.exhaustion += 0.1 * distMoved;
     else if (this.inWater && !this.onGround && distMoved > 0.001) this.exhaustion += 0.015 * distMoved;
@@ -290,6 +301,7 @@ export class Player {
   }
 
   damage(n, time, type = 'generic') {
+    if (this.creative) return; // invulnerable
     if (this.dead || n <= 0) return;
     if (time - this.lastDamage < 0.5) return; // brief invulnerability
     // armor reduces combat/burn damage (4% per point, capped 80%)
