@@ -1,10 +1,13 @@
 // Shared AABB-vs-voxel physics for the player and mobs.
 // Entities: pos = feet center {x,y,z}, vel {x,y,z}, half (xz half-width), height.
 
-import { B, isSolid } from './blocks.js';
+import { B, BLOCKS, isSolid } from './blocks.js';
 
 const EPS = 0.001;
 const AXES = ['x', 'z', 'y'];
+
+// Collision height of a block (slabs/stairs are half-height).
+const topOf = (id) => (BLOCKS[id] && BLOCKS[id].colHeight) || 1;
 
 function boxCollides(world, e) {
   const x0 = Math.floor(e.pos.x - e.half), x1 = Math.floor(e.pos.x + e.half);
@@ -12,8 +15,10 @@ function boxCollides(world, e) {
   const z0 = Math.floor(e.pos.z - e.half), z1 = Math.floor(e.pos.z + e.half);
   for (let by = y0; by <= y1; by++)
     for (let bz = z0; bz <= z1; bz++)
-      for (let bx = x0; bx <= x1; bx++)
-        if (isSolid(world.getBlock(bx, by, bz))) return true;
+      for (let bx = x0; bx <= x1; bx++) {
+        const id = world.getBlock(bx, by, bz);
+        if (isSolid(id) && e.pos.y < by + topOf(id)) return true;
+      }
   return false;
 }
 
@@ -42,11 +47,17 @@ export function moveEntity(world, e, dt) {
       for (let by = y0; by <= y1; by++) {
         for (let bz = z0; bz <= z1; bz++) {
           for (let bx = x0; bx <= x1; bx++) {
-            if (!isSolid(world.getBlock(bx, by, bz))) continue;
+            const id = world.getBlock(bx, by, bz);
+            if (!isSolid(id)) continue;
+            const top = by + topOf(id);
+            if (e.pos.y >= top) continue; // half-block entirely below the entity
             collided = true;
             const cell = a === 'x' ? bx : a === 'y' ? by : bz;
-            bound = d > 0 ? Math.min(bound, cell) : Math.max(bound, cell + 1);
-            if (a !== 'y') stepTop = Math.max(stepTop, by + 1);
+            if (a === 'y') bound = d > 0 ? Math.min(bound, cell) : Math.max(bound, top);
+            else {
+              bound = d > 0 ? Math.min(bound, cell) : Math.max(bound, cell + 1);
+              stepTop = Math.max(stepTop, top);
+            }
           }
         }
       }

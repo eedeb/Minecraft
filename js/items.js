@@ -1,24 +1,26 @@
 // Items, tools, mining rules (hardness / tool gating / drops), recipes,
 // and procedural pixel-art item icons.
 
-import { B, BLOCKS } from './blocks.js';
+import { B, BLOCKS, WOOL_IDS, ATLAS_COLS } from './blocks.js';
 
-// Non-block item ids start at 100 (block items reuse their block id).
+// Non-block item ids start at 200 (block items reuse their block id; block ids
+// stay below 200).
 export const I = {
-  STICK: 100, COAL: 101, IRON_INGOT: 102, DIAMOND: 103,
-  APPLE: 104, PORKCHOP: 105, BEEF: 106, MUTTON: 107, FLESH: 108,
-  WOOD_PICK: 110, STONE_PICK: 111, IRON_PICK: 112, DIAMOND_PICK: 113,
-  WOOD_AXE: 114, STONE_AXE: 115, IRON_AXE: 116, DIAMOND_AXE: 117,
-  WOOD_SHOVEL: 118, STONE_SHOVEL: 119, IRON_SHOVEL: 120, DIAMOND_SHOVEL: 121,
-  WOOD_SWORD: 122, STONE_SWORD: 123, IRON_SWORD: 124, DIAMOND_SWORD: 125,
-  RAW_IRON: 126, CHARCOAL: 127,
-  COOKED_PORKCHOP: 128, STEAK: 129, COOKED_MUTTON: 130,
-  BUCKET: 131, WATER_BUCKET: 132, LAVA_BUCKET: 133,
-  IRON_HELMET: 134, IRON_CHEST: 135, IRON_LEGS: 136, IRON_BOOTS: 137,
-  DIAMOND_HELMET: 138, DIAMOND_CHEST: 139, DIAMOND_LEGS: 140, DIAMOND_BOOTS: 141,
-  FLINT_STEEL: 142, BLAZE_ROD: 143, ENDER_PEARL: 144,
-  BLAZE_POWDER: 145, EYE_OF_ENDER: 146,
-  STRING: 147, BOW: 148, ARROW: 149,
+  STICK: 200, COAL: 201, IRON_INGOT: 202, DIAMOND: 203,
+  APPLE: 204, PORKCHOP: 205, BEEF: 206, MUTTON: 207, FLESH: 208,
+  WOOD_PICK: 210, STONE_PICK: 211, IRON_PICK: 212, DIAMOND_PICK: 213,
+  WOOD_AXE: 214, STONE_AXE: 215, IRON_AXE: 216, DIAMOND_AXE: 217,
+  WOOD_SHOVEL: 218, STONE_SHOVEL: 219, IRON_SHOVEL: 220, DIAMOND_SHOVEL: 221,
+  WOOD_SWORD: 222, STONE_SWORD: 223, IRON_SWORD: 224, DIAMOND_SWORD: 225,
+  RAW_IRON: 226, CHARCOAL: 227,
+  COOKED_PORKCHOP: 228, STEAK: 229, COOKED_MUTTON: 230,
+  BUCKET: 231, WATER_BUCKET: 232, LAVA_BUCKET: 233,
+  IRON_HELMET: 234, IRON_CHEST: 235, IRON_LEGS: 236, IRON_BOOTS: 237,
+  DIAMOND_HELMET: 238, DIAMOND_CHEST: 239, DIAMOND_LEGS: 240, DIAMOND_BOOTS: 241,
+  FLINT_STEEL: 242, BLAZE_ROD: 243, ENDER_PEARL: 244,
+  BLAZE_POWDER: 245, EYE_OF_ENDER: 246,
+  STRING: 247, BOW: 248, ARROW: 249,
+  GOLD_INGOT: 250, RAW_GOLD: 251, REDSTONE: 252, LAPIS: 253, EMERALD: 254, QUARTZ: 255,
 };
 
 export const ARMOR_SLOTS = ['head', 'chest', 'legs', 'feet'];
@@ -28,9 +30,10 @@ export const TIER_NAMES = ['', 'wooden', 'stone', 'iron', 'diamond'];
 // id -> {name, kind:'block'|'tool'|'food'|'material', toolType?, tier?, mult?, damage?, heal?}
 export const ITEMS = {};
 
-// every real block is also an inventory item
+// every real block is also an inventory item (stair facing variants are
+// hidden — their base id is the item)
 for (let id = 1; id < BLOCKS.length; id++) {
-  if (!BLOCKS[id] || id === B.WATER || id === B.BEDROCK) continue;
+  if (!BLOCKS[id] || BLOCKS[id].hidden || id === B.WATER || id === B.BEDROCK) continue;
   ITEMS[id] = { name: BLOCKS[id].name, kind: 'block' };
 }
 // water & bedrock are unobtainable in survival but placeable from the
@@ -45,6 +48,12 @@ ITEMS[I.IRON_INGOT] = mat('Iron Ingot', 'material');
 ITEMS[I.DIAMOND] = mat('Diamond', 'material');
 ITEMS[I.RAW_IRON] = mat('Raw Iron', 'material');
 ITEMS[I.CHARCOAL] = mat('Charcoal', 'material');
+ITEMS[I.GOLD_INGOT] = mat('Gold Ingot', 'material');
+ITEMS[I.RAW_GOLD] = mat('Raw Gold', 'material');
+ITEMS[I.REDSTONE] = mat('Redstone Dust', 'material');
+ITEMS[I.LAPIS] = mat('Lapis Lazuli', 'material');
+ITEMS[I.EMERALD] = mat('Emerald', 'material');
+ITEMS[I.QUARTZ] = mat('Nether Quartz', 'material');
 // food: hunger points restored + saturation
 ITEMS[I.APPLE] = mat('Apple', 'food', { hunger: 4, sat: 2.4 });
 ITEMS[I.PORKCHOP] = mat('Raw Porkchop', 'food', { hunger: 3, sat: 1.8 });
@@ -128,9 +137,15 @@ export const SMELT_TIME = 10;
 
 export const SMELTING = {
   [I.RAW_IRON]: I.IRON_INGOT,
+  [I.RAW_GOLD]: I.GOLD_INGOT,
   [B.SAND]: B.GLASS,
   [B.COBBLE]: B.STONE,
+  [B.STONE]: B.SMOOTH_STONE,
+  [B.CLAY]: B.BRICKS,
+  [B.NETHERRACK]: B.NETHER_BRICK,
   [B.LOG]: I.CHARCOAL,
+  [B.BIRCH_LOG]: I.CHARCOAL,
+  [B.SPRUCE_LOG]: I.CHARCOAL,
   [I.PORKCHOP]: I.COOKED_PORKCHOP,
   [I.BEEF]: I.STEAK,
   [I.MUTTON]: I.COOKED_MUTTON,
@@ -141,8 +156,16 @@ export const FUEL = {
   [I.COAL]: 80,
   [I.CHARCOAL]: 80,
   [B.LOG]: 15,
+  [B.BIRCH_LOG]: 15,
+  [B.SPRUCE_LOG]: 15,
   [B.PLANK]: 15,
+  [B.BIRCH_PLANK]: 15,
+  [B.SPRUCE_PLANK]: 15,
   [B.CRAFTING_TABLE]: 15,
+  [B.BOOKSHELF]: 15,
+  [B.FENCE]: 15,
+  [B.OAK_SLAB]: 7,
+  [B.OAK_STAIRS]: 15,
   [I.STICK]: 5,
   [I.BLAZE_ROD]: 60,
   [I.LAVA_BUCKET]: 1000,
@@ -180,7 +203,61 @@ export const MINING = {
   [B.STONE_BRICK]: { hand: 7.5, tool: 'pickaxe', tier: 1, drop: () => [B.STONE_BRICK, 1] },
   [B.IRON_BLOCK]: { hand: 15, tool: 'pickaxe', tier: 2, drop: () => [B.IRON_BLOCK, 1] },
   [B.DIAMOND_BLOCK]: { hand: 15, tool: 'pickaxe', tier: 3, drop: () => [B.DIAMOND_BLOCK, 1] },
+  // building blocks
+  [B.BRICKS]: { hand: 10, tool: 'pickaxe', tier: 1, drop: () => [B.BRICKS, 1] },
+  [B.SANDSTONE]: { hand: 4, tool: 'pickaxe', tier: 1, drop: () => [B.SANDSTONE, 1] },
+  [B.SMOOTH_STONE]: { hand: 7.5, tool: 'pickaxe', tier: 1, drop: () => [B.SMOOTH_STONE, 1] },
+  [B.MOSSY_COBBLE]: { hand: 10, tool: 'pickaxe', tier: 1, drop: () => [B.MOSSY_COBBLE, 1] },
+  [B.GRAVEL]: { hand: 0.9, tool: 'shovel', tier: 0, drop: () => [B.GRAVEL, 1] },
+  [B.CLAY]: { hand: 0.9, tool: 'shovel', tier: 0, drop: () => [B.CLAY, 1] },
+  [B.BOOKSHELF]: { hand: 2.5, tool: 'axe', tier: 0, drop: () => [B.BOOKSHELF, 1] },
+  [B.GLOWSTONE]: { hand: 0.6, tool: null, tier: 0, drop: () => [B.GLOWSTONE, 1] },
+  [B.QUARTZ_BLOCK]: { hand: 4, tool: 'pickaxe', tier: 1, drop: () => [B.QUARTZ_BLOCK, 1] },
+  [B.NETHER_BRICK]: { hand: 10, tool: 'pickaxe', tier: 1, drop: () => [B.NETHER_BRICK, 1] },
+  [B.GOLD_ORE]: { hand: 15, tool: 'pickaxe', tier: 3, drop: () => [I.RAW_GOLD, 1] },
+  [B.REDSTONE_ORE]: { hand: 15, tool: 'pickaxe', tier: 3, drop: (r) => [I.REDSTONE, 4 + (r < 0.5 ? 0 : 1)] },
+  [B.LAPIS_ORE]: { hand: 15, tool: 'pickaxe', tier: 2, drop: (r) => [I.LAPIS, 4 + ((r * 5) | 0)] },
+  [B.EMERALD_ORE]: { hand: 15, tool: 'pickaxe', tier: 3, drop: () => [I.EMERALD, 1] },
+  [B.QUARTZ_ORE]: { hand: 10, tool: 'pickaxe', tier: 1, drop: () => [I.QUARTZ, 1] },
+  [B.GOLD_BLOCK]: { hand: 15, tool: 'pickaxe', tier: 3, drop: () => [B.GOLD_BLOCK, 1] },
+  [B.REDSTONE_BLOCK]: { hand: 15, tool: 'pickaxe', tier: 1, drop: () => [B.REDSTONE_BLOCK, 1] },
+  [B.LAPIS_BLOCK]: { hand: 15, tool: 'pickaxe', tier: 2, drop: () => [B.LAPIS_BLOCK, 1] },
+  [B.EMERALD_BLOCK]: { hand: 15, tool: 'pickaxe', tier: 3, drop: () => [B.EMERALD_BLOCK, 1] },
+  [B.BIRCH_LOG]: { hand: 3, tool: 'axe', tier: 0, drop: () => [B.BIRCH_LOG, 1] },
+  [B.BIRCH_PLANK]: { hand: 3, tool: 'axe', tier: 0, drop: () => [B.BIRCH_PLANK, 1] },
+  [B.SPRUCE_LOG]: { hand: 3, tool: 'axe', tier: 0, drop: () => [B.SPRUCE_LOG, 1] },
+  [B.SPRUCE_PLANK]: { hand: 3, tool: 'axe', tier: 0, drop: () => [B.SPRUCE_PLANK, 1] },
+  [B.PUMPKIN]: { hand: 1.4, tool: 'axe', tier: 0, drop: () => [B.PUMPKIN, 1] },
+  [B.MELON]: { hand: 1.4, tool: 'axe', tier: 0, drop: () => [B.MELON, 1] },
+  [B.HAY]: { hand: 0.75, tool: null, tier: 0, drop: () => [B.HAY, 1] },
+  [B.SNOW_BLOCK]: { hand: 0.75, tool: 'shovel', tier: 0, drop: () => [B.SNOW_BLOCK, 1] },
+  [B.TNT]: { hand: 0.3, tool: null, tier: 0, drop: () => [B.TNT, 1] },
+  [B.CACTUS]: { hand: 0.6, tool: null, tier: 0, drop: () => [B.CACTUS, 1] },
+  [B.TORCH]: { hand: 0.05, tool: null, tier: 0, drop: () => [B.TORCH, 1] },
+  [B.FENCE]: { hand: 3, tool: 'axe', tier: 0, drop: () => [B.FENCE, 1] },
+  [B.GLASS_PANE]: { hand: 0.45, tool: null, tier: 0, drop: () => null },
+  [B.POPPY]: { hand: 0.05, tool: null, tier: 0, drop: () => [B.POPPY, 1] },
+  [B.DANDELION]: { hand: 0.05, tool: null, tier: 0, drop: () => [B.DANDELION, 1] },
+  [B.OAK_SLAB]: { hand: 3, tool: 'axe', tier: 0, drop: () => [B.OAK_SLAB, 1] },
+  [B.COBBLE_SLAB]: { hand: 10, tool: 'pickaxe', tier: 1, drop: () => [B.COBBLE_SLAB, 1] },
+  [B.STONE_SLAB]: { hand: 7.5, tool: 'pickaxe', tier: 1, drop: () => [B.STONE_SLAB, 1] },
+  [B.STONE_BRICK_SLAB]: { hand: 7.5, tool: 'pickaxe', tier: 1, drop: () => [B.STONE_BRICK_SLAB, 1] },
+  [B.BRICK_SLAB]: { hand: 10, tool: 'pickaxe', tier: 1, drop: () => [B.BRICK_SLAB, 1] },
+  [B.SANDSTONE_SLAB]: { hand: 4, tool: 'pickaxe', tier: 1, drop: () => [B.SANDSTONE_SLAB, 1] },
+  [B.OAK_STAIRS]: { hand: 3, tool: 'axe', tier: 0, drop: () => [B.OAK_STAIRS, 1] },
+  [B.COBBLE_STAIRS]: { hand: 10, tool: 'pickaxe', tier: 1, drop: () => [B.COBBLE_STAIRS, 1] },
+  [B.STONE_BRICK_STAIRS]: { hand: 7.5, tool: 'pickaxe', tier: 1, drop: () => [B.STONE_BRICK_STAIRS, 1] },
+  [B.BRICK_STAIRS]: { hand: 10, tool: 'pickaxe', tier: 1, drop: () => [B.BRICK_STAIRS, 1] },
 };
+
+// stair facing variants break like their base block; colored wool like wool
+for (let id = 1; id < BLOCKS.length; id++) {
+  const blk = BLOCKS[id];
+  if (blk && blk.hidden && blk.item && MINING[blk.item]) MINING[id] = MINING[blk.item];
+}
+for (const id of WOOL_IDS) {
+  MINING[id] = { hand: 1.1, tool: null, tier: 0, drop: () => [id, 1] };
+}
 
 // What happens if `heldId` mines `blockId`. null = unbreakable.
 export function breakInfo(blockId, heldId) {
@@ -244,11 +321,27 @@ const armorRecipes = [];
   }
 }
 
+// slabs & stairs: 3 in a row -> 6 slabs; step shape -> 4 stairs
+const slabRecipes = [
+  [B.OAK_SLAB, B.PLANK], [B.COBBLE_SLAB, B.COBBLE], [B.STONE_SLAB, B.SMOOTH_STONE],
+  [B.STONE_BRICK_SLAB, B.STONE_BRICK], [B.BRICK_SLAB, B.BRICKS], [B.SANDSTONE_SLAB, B.SANDSTONE],
+].map(([out, m]) => shaped(out, 6, ['MMM'], { M: m }));
+const stairRecipes = [
+  [B.OAK_STAIRS, B.PLANK], [B.COBBLE_STAIRS, B.COBBLE],
+  [B.STONE_BRICK_STAIRS, B.STONE_BRICK], [B.BRICK_STAIRS, B.BRICKS],
+].map(([out, m]) => shaped(out, 4, ['M..', 'MM.', 'MMM'], { M: m }));
+
 export const RECIPES = [
   shaped(B.PLANK, 4, ['L'], { L: B.LOG }),
+  shaped(B.BIRCH_PLANK, 4, ['L'], { L: B.BIRCH_LOG }),
+  shaped(B.SPRUCE_PLANK, 4, ['L'], { L: B.SPRUCE_LOG }),
   shaped(I.STICK, 4, ['P', 'P'], { P: B.PLANK }),
+  shaped(I.STICK, 4, ['P', 'P'], { P: B.BIRCH_PLANK }),
+  shaped(I.STICK, 4, ['P', 'P'], { P: B.SPRUCE_PLANK }),
   shaped(B.CRAFTING_TABLE, 1, ['PP', 'PP'], { P: B.PLANK }),
   shaped(B.FURNACE, 1, ['CCC', 'C.C', 'CCC'], { C: B.COBBLE }),
+  shaped(B.TORCH, 4, ['C', 'S'], { C: I.COAL, S: I.STICK }),
+  shaped(B.TORCH, 4, ['C', 'S'], { C: I.CHARCOAL, S: I.STICK }),
   ...toolRecipes,
   shaped(I.BUCKET, 1, ['I.I', '.I.'], { I: I.IRON_INGOT }),
   shapeless(I.FLINT_STEEL, 1, [I.IRON_INGOT, I.COAL]),
@@ -260,10 +353,26 @@ export const RECIPES = [
   shapeless(I.EYE_OF_ENDER, 1, [I.ENDER_PEARL, I.BLAZE_POWDER]),
   ...armorRecipes,
   shaped(B.STONE_BRICK, 4, ['SS', 'SS'], { S: B.STONE }),
+  shaped(B.SANDSTONE, 1, ['SS', 'SS'], { S: B.SAND }),
+  shaped(B.QUARTZ_BLOCK, 1, ['QQ', 'QQ'], { Q: I.QUARTZ }),
+  ...slabRecipes,
+  ...stairRecipes,
+  shaped(B.FENCE, 3, ['PSP', 'PSP'], { P: B.PLANK, S: I.STICK }),
+  shaped(B.GLASS_PANE, 16, ['GGG', 'GGG'], { G: B.GLASS }),
+  shaped(B.BOOKSHELF, 1, ['PPP', '...', 'PPP'], { P: B.PLANK }),
+  shaped(B.TNT, 1, ['CSC', 'SCS', 'CSC'], { C: I.COAL, S: B.SAND }),
   shaped(B.IRON_BLOCK, 1, ['III', 'III', 'III'], { I: I.IRON_INGOT }),
   shapeless(I.IRON_INGOT, 9, [B.IRON_BLOCK]),
+  shaped(B.GOLD_BLOCK, 1, ['GGG', 'GGG', 'GGG'], { G: I.GOLD_INGOT }),
+  shapeless(I.GOLD_INGOT, 9, [B.GOLD_BLOCK]),
   shaped(B.DIAMOND_BLOCK, 1, ['DDD', 'DDD', 'DDD'], { D: I.DIAMOND }),
   shapeless(I.DIAMOND, 9, [B.DIAMOND_BLOCK]),
+  shaped(B.REDSTONE_BLOCK, 1, ['RRR', 'RRR', 'RRR'], { R: I.REDSTONE }),
+  shapeless(I.REDSTONE, 9, [B.REDSTONE_BLOCK]),
+  shaped(B.LAPIS_BLOCK, 1, ['LLL', 'LLL', 'LLL'], { L: I.LAPIS }),
+  shapeless(I.LAPIS, 9, [B.LAPIS_BLOCK]),
+  shaped(B.EMERALD_BLOCK, 1, ['EEE', 'EEE', 'EEE'], { E: I.EMERALD }),
+  shapeless(I.EMERALD, 9, [B.EMERALD_BLOCK]),
 ];
 
 // Match the crafting grid (row-major array of itemId|null, always 3x3)
@@ -528,6 +637,13 @@ ITEM_STENCILS[I.BLAZE_ROD] = {
 ITEM_STENCILS[I.BUCKET] = { rows: BUCKET_ROWS, pal: { ...BUCKET_PAL, L: '#c8c8cc' } };
 ITEM_STENCILS[I.WATER_BUCKET] = { rows: BUCKET_ROWS, pal: { ...BUCKET_PAL, L: '#3d6fd9' } };
 ITEM_STENCILS[I.LAVA_BUCKET] = { rows: BUCKET_ROWS, pal: { ...BUCKET_PAL, L: '#e8702a' } };
+// new ores/materials reuse existing stencil rows with their own palettes
+ITEM_STENCILS[I.GOLD_INGOT] = { rows: ITEM_STENCILS[I.IRON_INGOT].rows, pal: { m: '#f2cf5a', d: '#bd9430', l: '#ffefa8' } };
+ITEM_STENCILS[I.RAW_GOLD] = { rows: ITEM_STENCILS[I.RAW_IRON].rows, pal: { m: '#e8c25c', d: '#b08a32', l: '#f8e8a8' } };
+ITEM_STENCILS[I.REDSTONE] = { rows: ITEM_STENCILS[I.BLAZE_POWDER].rows, pal: { g: '#c62f22', G: '#ff6a55' } };
+ITEM_STENCILS[I.LAPIS] = { rows: ITEM_STENCILS[I.COAL].rows, pal: { c: '#2e52b4', l: '#5e86e0', d: '#1e3680' } };
+ITEM_STENCILS[I.EMERALD] = { rows: ITEM_STENCILS[I.DIAMOND].rows, pal: { m: '#3ecf6e', d: '#2a9a4e', l: '#b0ffcc' } };
+ITEM_STENCILS[I.QUARTZ] = { rows: ITEM_STENCILS[I.DIAMOND].rows, pal: { m: '#ece8e0', d: '#c0b8ac', l: '#ffffff' } };
 
 const ARMOR_STENCILS = {
   head: [
@@ -580,8 +696,9 @@ export function itemIcon(id) {
   const ctx = c.getContext('2d');
   const it = ITEMS[id];
   if (it && it.kind === 'block' && atlasRef) {
-    const tile = BLOCKS[id].side;
-    const col = tile % 8, row = (tile / 8) | 0;
+    const blk = BLOCKS[id];
+    const tile = blk.icon ?? blk.side; // slabs/stairs/fences have dedicated icon tiles
+    const col = tile % ATLAS_COLS, row = (tile / ATLAS_COLS) | 0;
     ctx.drawImage(atlasRef, col * 16, row * 16, 16, 16, 0, 0, 16, 16);
   } else if (it && it.kind === 'tool') {
     const m = MATS[it.matKey];

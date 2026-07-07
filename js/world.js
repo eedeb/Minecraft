@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import { Perlin, fbm2, hash2, hash3 } from './noise.js';
-import { B, BLOCKS, isOpaque, tileUV } from './blocks.js';
+import { B, BLOCKS, isOpaque, tileUV, blockBoxes, emitBox, emitCross } from './blocks.js';
 
 export const CHUNK = 16;
 export const HEIGHT = 80;
@@ -66,12 +66,16 @@ export class World {
     const desert = fbm2(q, x * 0.0045 + 1000, z * 0.0045 - 1000, 2) > 0.28 && h > SEA && h < 52;
     const cold = !desert && fbm2(q, x * 0.0028 + 2000, z * 0.0028 - 2000, 2) > 0.42;
     const snowy = h >= 62 || (cold && h > SEA);
-    let treeDensity = 0;
-    if (!desert && !snowy && h > SEA + 1 && h < 58) {
-      const forest = fbm2(p, x * 0.008 - 800, z * 0.008 + 800, 2);
-      treeDensity = forest > 0.15 ? 0.035 : 0.005;
+    let treeDensity = 0, treeType = 'oak';
+    if (!desert && h > SEA + 1) {
+      if (snowy || cold) {
+        if (h < 60) { treeDensity = 0.012; treeType = 'spruce'; }
+      } else if (h < 58) {
+        const forest = fbm2(p, x * 0.008 - 800, z * 0.008 + 800, 2);
+        treeDensity = forest > 0.15 ? 0.035 : 0.005;
+      }
     }
-    return { h, desert, snowy, cold, treeDensity };
+    return { h, desert, snowy, cold, treeDensity, treeType };
   }
 
   caveAt(x, y, z) {
@@ -98,6 +102,12 @@ export class World {
           else if (y <= floorH || y >= ceilH) id = B.NETHERRACK;
           else if (this.pCave1.noise3(wx * 0.05, y * 0.05, wz * 0.05) > 0.42) id = B.NETHERRACK; // pillars
           else if (y <= LAVA_SEA) id = B.LAVA;
+          if (id === B.NETHERRACK) {
+            if (hash3(wx, y, wz, this.seed ^ 0x33f1) < 0.014) id = B.QUARTZ_ORE;
+          } else if (id === B.AIR && y >= ceilH - 2) {
+            // glowstone clusters hang under the ceiling
+            if (hash3(wx >> 1, y >> 1, wz >> 1, this.seed ^ 0x9d5) < 0.05) id = B.GLOWSTONE;
+          }
           data[lx + lz * CHUNK + y * CHUNK * CHUNK] = id;
         }
       }
@@ -187,13 +197,23 @@ export class World {
             if (carveOK && this.caveAt(wx, y, wz)) {
               id = y <= 11 ? B.LAVA : B.AIR; // lava lakes in the deepest caves
             } else if (y < h - 3) {
-              id = B.STONE;
-              const r = hash3(wx, y, wz, this.seed ^ 0x51ab);
-              if (r < 0.0025 && y < 14) id = B.DIAMOND_ORE;
-              else if (r < 0.009 && y < 36) id = B.IRON_ORE;
-              else if (r < 0.021 && y < 52) id = B.COAL_ORE;
+              if (this.pCave2.noise3(wx * 0.09 + 80, y * 0.09, wz * 0.09 + 80) > 0.56) {
+                id = B.GRAVEL; // gravel pockets
+              } else {
+                id = B.STONE;
+                const r = hash3(wx, y, wz, this.seed ^ 0x51ab);
+                if (r < 0.0025 && y < 14) id = B.DIAMOND_ORE;
+                else if (r < 0.0036 && y < 16) id = B.EMERALD_ORE;
+                else if (r < 0.006 && y < 22) id = B.GOLD_ORE;
+                else if (r < 0.009 && y < 16) id = B.REDSTONE_ORE;
+                else if (r < 0.011 && y < 26) id = B.LAPIS_ORE;
+                else if (r < 0.0185 && y < 36) id = B.IRON_ORE;
+                else if (r < 0.0305 && y < 52) id = B.COAL_ORE;
+              }
             } else if (y < h) {
-              id = (desert || beach) ? B.SAND : B.DIRT;
+              // clay patches line lake and ocean beds
+              if (h <= SEA && fbm2(this.pNoise2, wx * 0.06 + 3000, wz * 0.06 - 3000, 2) > 0.42) id = B.CLAY;
+              else id = (desert || beach) ? B.SAND : B.DIRT;
             } else { // y === h, surface
               if (desert || beach) id = B.SAND;
               else if (snowy) id = B.SNOW;
@@ -222,9 +242,30 @@ export class World {
         const wx = baseX + dx, wz = baseZ + dz;
         if (hash2(wx, wz, this.seed ^ 0x9e37) >= info.treeDensity) continue;
         const h = info.h;
-        const th = 4 + ((hash2(wx, wz, this.seed + 7) * 3) | 0);
+        // forests mix in the occasional birch; cold biomes grow spruce
+        const type = info.treeType === 'spruce' ? 'spruce'
+          : hash2(wx, wz, this.seed + 29) < 0.15 ? 'birch' : 'oak';
+        const log = type === 'spruce' ? B.SPRUCE_LOG : type === 'birch' ? B.BIRCH_LOG : B.LOG;
         set(dx, h, dz, B.DIRT, false);
-        for (let dy = 1; dy <= th; dy++) set(dx, h + dy, dz, B.LOG, false);
+        if (type === 'spruce') {
+          // tall conical canopy
+          const th = 5 + ((hash2(wx, wz, this.seed + 7) * 3) | 0);
+          for (let dy = 1; dy <= th; dy++) set(dx, h + dy, dz, log, false);
+          set(dx, h + th + 1, dz, B.LEAVES, true);
+          for (let dy = th - 4; dy <= th; dy++) {
+            const r = (th - dy) % 2 === 0 ? 1 : 2;
+            for (let ox = -r; ox <= r; ox++) {
+              for (let oz = -r; oz <= r; oz++) {
+                if (ox === 0 && oz === 0) continue;
+                if (r === 2 && Math.abs(ox) === 2 && Math.abs(oz) === 2) continue;
+                set(dx + ox, h + dy, dz + oz, B.LEAVES, true);
+              }
+            }
+          }
+          continue;
+        }
+        const th = 4 + ((hash2(wx, wz, this.seed + 7) * 3) | 0);
+        for (let dy = 1; dy <= th; dy++) set(dx, h + dy, dz, log, false);
         for (let dy = th - 2; dy <= th + 1; dy++) {
           const r = dy <= th - 1 ? 2 : 1;
           for (let ox = -r; ox <= r; ox++) {
@@ -236,6 +277,35 @@ export class World {
               }
               set(dx + ox, h + dy, dz + oz, B.LEAVES, true);
             }
+          }
+        }
+      }
+    }
+
+    // surface decorations: flowers, pumpkins, melons, cacti
+    for (let lz = 0; lz < CHUNK; lz++) {
+      for (let lx = 0; lx < CHUNK; lx++) {
+        const { h, desert, snowy, treeDensity } = colAt(lx, lz);
+        if (h <= SEA || h + 3 >= HEIGHT) continue;
+        const wx = baseX + lx, wz = baseZ + lz;
+        const idx = lx + lz * CHUNK;
+        const ground = data[idx + h * CHUNK * CHUNK];
+        const above = data[idx + (h + 1) * CHUNK * CHUNK];
+        if (above !== B.AIR) continue;
+        const r = hash2(wx, wz, this.seed ^ 0x77aa);
+        if (desert && ground === B.SAND) {
+          if (r < 0.006) {
+            const ht = 1 + ((hash2(wx, wz, this.seed + 21) * 3) | 0);
+            for (let dy = 1; dy <= ht; dy++) data[idx + (h + dy) * CHUNK * CHUNK] = B.CACTUS;
+          }
+        } else if (!snowy && ground === B.GRASS) {
+          if (r < 0.014) {
+            data[idx + (h + 1) * CHUNK * CHUNK] =
+              hash2(wx, wz, this.seed + 33) < 0.55 ? B.DANDELION : B.POPPY;
+          } else if (r < 0.0155) {
+            data[idx + (h + 1) * CHUNK * CHUNK] = B.PUMPKIN;
+          } else if (r < 0.017 && treeDensity > 0.02) {
+            data[idx + (h + 1) * CHUNK * CHUNK] = B.MELON;
           }
         }
       }
@@ -322,6 +392,7 @@ export class World {
     set(hx, hy + 2, hz - 2, B.AIR);
     set(hx - 2, hy + 2, hz, B.GLASS);
     set(hx + 2, hy + 2, hz, B.GLASS);
+    set(hx - 1, hy + 1, hz + 1, B.TORCH);
     if (withChest) set(hx + 1, hy + 1, hz + 1, B.CHEST);
   }
 
@@ -416,8 +487,8 @@ export class World {
     const { cx, cz, data } = c;
     const baseX = cx * CHUNK, baseZ = cz * CHUNK;
     const opq = { pos: [], nor: [], uv: [], col: [], idx: [] };
-    const wat = { pos: [], nor: [], uv: [], idx: [] };
-    const lav = { pos: [], nor: [], uv: [], idx: [] };
+    const wat = { pos: [], nor: [], uv: [], col: [], idx: [] }; // col unused (no vertex colors)
+    const lav = { pos: [], nor: [], uv: [], col: [], idx: [] };
 
     const get = (lx, y, lz) => {
       if (y < 0) return B.BEDROCK;
@@ -435,7 +506,31 @@ export class World {
           if (id === B.AIR) continue;
           const blk = BLOCKS[id];
           const water = id === B.WATER;
-          const lava = id === B.LAVA || id === B.PORTAL || id === B.END_PORTAL; // all render unlit/glowing
+          const lava = id === B.LAVA || id === B.PORTAL || id === B.END_PORTAL || blk.glow; // all render unlit/glowing
+
+          // non-cube shapes: emit sub-boxes / crossed quads instead of cube faces
+          if (blk.shape) {
+            const buf = blk.glow ? lav : opq;
+            if (blk.shape === 'cross') {
+              emitCross(buf, lx, y, lz, blk.side);
+              continue;
+            }
+            let conn = null;
+            if (blk.shape === 'fence' || blk.shape === 'pane') {
+              const link = (nb) => nb === id || isOpaque(nb) || (blk.shape === 'pane' && nb === B.GLASS);
+              conn = {
+                nx: link(get(lx - 1, y, lz)), px: link(get(lx + 1, y, lz)),
+                nz: link(get(lx, y, lz - 1)), pz: link(get(lx, y, lz + 1)),
+              };
+            }
+            const cull = [
+              isOpaque(get(lx + 1, y, lz)), isOpaque(get(lx - 1, y, lz)),
+              isOpaque(get(lx, y + 1, lz)), isOpaque(get(lx, y - 1, lz)),
+              isOpaque(get(lx, y, lz + 1)), isOpaque(get(lx, y, lz - 1)),
+            ];
+            for (const box of blockBoxes(id, conn)) emitBox(buf, lx, y, lz, box, cull);
+            continue;
+          }
 
           for (const f of FACES) {
             const nb = get(lx + f.dir[0], y + f.dir[1], lz + f.dir[2]);

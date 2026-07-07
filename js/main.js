@@ -3,7 +3,7 @@
 // HUD, day/night, save/load.
 
 import * as THREE from 'three';
-import { B, BLOCKS, buildAtlas, tileUV, computeAvgColors } from './blocks.js';
+import { B, BLOCKS, buildAtlas, tileUV, computeAvgColors, isSolid, blockBoxes, emitBox, emitCross } from './blocks.js';
 import { World, CHUNK, HEIGHT, SEA } from './world.js';
 import { Player } from './player.js';
 import { MobManager, Dragon } from './mobs.js';
@@ -27,9 +27,39 @@ const MOB_REACH = 3; // Minecraft entity reach
 function loadSave() {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) return migrateSave(JSON.parse(raw));
   } catch (e) { /* corrupted save */ }
   return null;
+}
+
+// Non-block item ids moved from 100-149 up to 200-249 when block ids grew past
+// 100 — remap items in saves written before the change.
+function migrateSave(s) {
+  if (!s || s.itemsV2) return s;
+  const remap = (id) => (id >= 100 && id < 150 ? id + 100 : id);
+  const remapPair = (v) => (Array.isArray(v) ? [remap(+v[0]), v[1]] : v);
+  const inv = s.inventory;
+  if (inv) {
+    for (const k of ['slots', 'craft', 'armor']) {
+      if (Array.isArray(inv[k])) inv[k] = inv[k].map(remapPair);
+    }
+    if (inv.cursor) inv.cursor = remapPair(inv.cursor);
+    if (Array.isArray(inv.counts)) inv.counts = inv.counts.map(remapPair); // v1 inventory
+    if (Array.isArray(inv.hotbar)) inv.hotbar = inv.hotbar.map((id) => (id == null ? id : remap(+id)));
+  }
+  for (const [, f] of s.furnaces || []) {
+    if (f && Array.isArray(f.slots)) f.slots = f.slots.map(remapPair);
+  }
+  for (const e of s.chests || []) {
+    if (Array.isArray(e[1])) e[1] = e[1].map(remapPair);
+  }
+  if (s.drops) {
+    for (const rows of Object.values(s.drops)) {
+      for (const row of rows || []) if (Array.isArray(row)) row[0] = remap(+row[0]);
+    }
+  }
+  s.itemsV2 = true;
+  return s;
 }
 
 // user preferences (sensitivity, view bobbing)
@@ -118,7 +148,7 @@ atlasTex.colorSpace = THREE.SRGBColorSpace;
 const materials = {
   opaque: new THREE.MeshLambertMaterial({ map: atlasTex, vertexColors: true, alphaTest: 0.5 }),
   water: new THREE.MeshLambertMaterial({ map: atlasTex, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }),
-  lava: new THREE.MeshBasicMaterial({ map: atlasTex }), // unlit: glows in the dark
+  lava: new THREE.MeshBasicMaterial({ map: atlasTex, alphaTest: 0.5 }), // unlit: glows in the dark (also torches/glowstone)
 };
 const avgColors = computeAvgColors(atlasCanvas);
 
@@ -272,33 +302,15 @@ const particles = new Particles(scene);
 
 function makeBlockGeometry(id) {
   const blk = BLOCKS[id];
-  const pos = [], nor = [], uv = [], col = [], idx = [];
-  const FACES = [
-    { dir: [1, 0, 0], shade: 0.8, corners: [[1, 0, 1, 0, 0], [1, 0, 0, 1, 0], [1, 1, 0, 1, 1], [1, 1, 1, 0, 1]] },
-    { dir: [-1, 0, 0], shade: 0.8, corners: [[0, 0, 0, 0, 0], [0, 0, 1, 1, 0], [0, 1, 1, 1, 1], [0, 1, 0, 0, 1]] },
-    { dir: [0, 1, 0], shade: 1.0, corners: [[0, 1, 1, 0, 0], [1, 1, 1, 1, 0], [1, 1, 0, 1, 1], [0, 1, 0, 0, 1]] },
-    { dir: [0, -1, 0], shade: 0.55, corners: [[0, 0, 0, 0, 0], [1, 0, 0, 1, 0], [1, 0, 1, 1, 1], [0, 0, 1, 0, 1]] },
-    { dir: [0, 0, 1], shade: 0.72, corners: [[0, 0, 1, 0, 0], [1, 0, 1, 1, 0], [1, 1, 1, 1, 1], [0, 1, 1, 0, 1]] },
-    { dir: [0, 0, -1], shade: 0.72, corners: [[1, 0, 0, 0, 0], [0, 0, 0, 1, 0], [0, 1, 0, 1, 1], [1, 1, 0, 0, 1]] },
-  ];
-  for (const f of FACES) {
-    const tile = f.dir[1] === 1 ? blk.top : f.dir[1] === -1 ? blk.bottom : blk.side;
-    const r = tileUV(tile);
-    const base = pos.length / 3;
-    for (const c of f.corners) {
-      pos.push(c[0] - 0.5, c[1] - 0.5, c[2] - 0.5);
-      nor.push(...f.dir);
-      uv.push(c[3] ? r.u1 : r.u0, c[4] ? r.v1 : r.v0);
-      col.push(f.shade, f.shade, f.shade);
-    }
-    idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
-  }
+  const buf = { pos: [], nor: [], uv: [], col: [], idx: [] };
+  if (blk.shape === 'cross') emitCross(buf, -0.5, -0.5, -0.5, blk.side);
+  else for (const box of blockBoxes(id)) emitBox(buf, -0.5, -0.5, -0.5, box);
   const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
-  g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nor), 3));
-  g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(uv), 2));
-  g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(col), 3));
-  g.setIndex(idx);
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(buf.pos), 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(buf.nor), 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(buf.uv), 2));
+  g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(buf.col), 3));
+  g.setIndex(buf.idx);
   return g;
 }
 
@@ -1011,6 +1023,7 @@ function fillChestLoot(state, key) {
   const table = [
     [I.APPLE, 1, 3, 1], [I.COAL, 2, 5, 1], [I.IRON_INGOT, 1, 3, 0.7],
     [I.STICK, 2, 6, 1], [B.PLANK, 2, 8, 1], [B.WOOL, 1, 3, 0.8],
+    [B.TORCH, 3, 8, 0.9], [B.BRICKS, 2, 5, 0.4],
     [I.PORKCHOP, 1, 2, 0.6], [I.STRING, 1, 4, 0.6], [I.ENDER_PEARL, 1, 1, 0.15],
     [I.IRON_PICK, 1, 1, 0.12], [I.IRON_SWORD, 1, 1, 0.12],
   ];
@@ -1945,8 +1958,16 @@ function useHeld() {
     // only solid blocks can't overlap entities (liquids can be placed at your feet)
     if (BLOCKS[id].solid && (blockOverlapsEntity(px, py, pz, player) || mobs.anyOverlapping(px, py, pz))) return;
     if (!world.hasDataAt(px, pz)) return;
+    // torches, flowers and cacti need a solid block underneath
+    if (BLOCKS[id].needSupport && !isSolid(world.getBlock(px, py - 1, pz))) return;
+    let placeId = id;
+    if (BLOCKS[id].facings) {
+      // stairs: the high step lands on the far side, ascending away from you
+      const d = player.forwardDir();
+      placeId = BLOCKS[id].facings[Math.abs(d.x) > Math.abs(d.z) ? (d.x > 0 ? 0 : 2) : (d.z > 0 ? 1 : 3)];
+    }
     swingT = 0;
-    world.setBlock(px, py, pz, id);
+    world.setBlock(px, py, pz, placeId);
     consumeHeld();
     sfx.place();
     // creative-placed liquids still react with each other
@@ -1981,6 +2002,11 @@ function useHeld() {
   } else if (it.kind === 'lighter') {
     if (!hit) return;
     swingT = 0;
+    if (hit.id === B.TNT) {
+      igniteTnt(hit.x, hit.y, hit.z);
+      toast('The TNT hisses…', 1.2);
+      return;
+    }
     const lx = hit.x + hit.face[0], ly = hit.y + hit.face[1], lz = hit.z + hit.face[2];
     if (tryLightPortal(lx, ly, lz)) {
       sfx.portal();
@@ -2027,6 +2053,70 @@ function compassDir(dx, dz) {
   const dirs = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
   const a = (Math.atan2(dx, -dz) + Math.PI * 2) % (Math.PI * 2);
   return dirs[Math.round(a / (Math.PI / 4)) % 8];
+}
+
+// ---------------------------------------------------------------------------
+// TNT: lit with flint & steel, sparks for 2 seconds, then explodes
+// (chain-igniting any TNT caught in the blast)
+
+const tntFuses = []; // {x, y, z, t, spark}
+
+function igniteTnt(x, y, z, fuse = 2) {
+  if (tntFuses.some((f) => f.x === x && f.y === y && f.z === z)) return;
+  tntFuses.push({ x, y, z, t: fuse, spark: 0 });
+  sfx.fuse();
+}
+
+function explode(cx, cy, cz, radius = 3.4) {
+  const R = Math.ceil(radius);
+  for (let dy = -R; dy <= R; dy++) {
+    for (let dz = -R; dz <= R; dz++) {
+      for (let dx = -R; dx <= R; dx++) {
+        // ragged sphere edge
+        if (dx * dx + dy * dy + dz * dz > radius * radius * (0.7 + Math.random() * 0.45)) continue;
+        const x = cx + dx, y = cy + dy, z = cz + dz;
+        const id = world.getBlock(x, y, z);
+        if (id === B.AIR || id === B.WATER || id === B.BEDROCK || id === B.OBSIDIAN ||
+          id === B.END_FRAME || id === B.END_FRAME_FILLED || id === B.END_PORTAL || id === B.PORTAL) continue;
+        if (id === B.TNT) { igniteTnt(x, y, z, 0.2 + Math.random() * 0.5); continue; }
+        world.setBlock(x, y, z, B.AIR);
+      }
+    }
+  }
+  particles.burst(cx + 0.5, cy + 0.5, cz + 0.5, [1, 0.8, 0.35], 40, 10);
+  particles.burst(cx + 0.5, cy + 0.5, cz + 0.5, [0.4, 0.38, 0.36], 30, 7);
+  sfx.explode();
+  // entities take distance-scaled damage
+  const dmgAt = (ex, ey, ez) => {
+    const d = Math.hypot(ex - cx - 0.5, ey - cy - 0.5, ez - cz - 0.5);
+    return d > radius * 2 ? 0 : Math.round(22 * (1 - d / (radius * 2)));
+  };
+  const pDmg = dmgAt(player.pos.x, player.pos.y + 0.9, player.pos.z);
+  if (pDmg > 0) player.damage(pDmg, simTime, 'attack');
+  for (const m of mobs.mobs) {
+    const n = dmgAt(m.pos.x, m.pos.y + 0.5, m.pos.z);
+    if (n <= 0) continue;
+    const kx = m.pos.x - cx - 0.5, kz = m.pos.z - cz - 0.5;
+    const kl = Math.hypot(kx, kz) || 1;
+    m.hurt(n, kx / kl, kz / kl, { player, world, particles });
+  }
+}
+
+function updateTnt(dt) {
+  for (let i = tntFuses.length - 1; i >= 0; i--) {
+    const f = tntFuses[i];
+    f.t -= dt;
+    f.spark -= dt;
+    if (f.spark <= 0) {
+      f.spark = 0.12;
+      particles.burst(f.x + 0.5, f.y + 1.05, f.z + 0.5, [1, 0.9, 0.4], 2, 1.2);
+    }
+    if (f.t <= 0) {
+      tntFuses.splice(i, 1);
+      world.setBlock(f.x, f.y, f.z, B.AIR);
+      explode(f.x, f.y, f.z);
+    }
+  }
 }
 
 // visual eye-of-ender flight: drifts toward the stronghold, then pops
@@ -2152,6 +2242,7 @@ function save() {
     const editsE = [];
     for (const [ck, m] of worldEnd.edits) editsE.push([ck, [...m]]);
     localStorage.setItem(SAVE_KEY, JSON.stringify({
+      itemsV2: true, // item ids 200+ (post block-id expansion)
       seed: worldOver.seed,
       dim,
       gameMode: player.gameMode,
@@ -2211,6 +2302,7 @@ function frame(dt) {
     updatePearls(dt);
     updateArrows(dt);
     updateEyeFlights(dt);
+    updateTnt(dt);
     updateMining(dt);
 
     // held-repeat placing / eating
@@ -2350,7 +2442,7 @@ window.__game = {
   getTime: () => timeOfDay,
   getDaylight: () => daylight,
   forceStart: () => { forceStarted = true; started = true; overlay.classList.add('hidden'); },
-  currentTarget, setSelected, useHeld,
+  currentTarget, setSelected, useHeld, igniteTnt,
   give: (id, n = 1) => inventory.add(id, n),
   breakTarget: () => {
     const hit = currentTarget();

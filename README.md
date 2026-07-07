@@ -4,19 +4,22 @@ A 3D Minecraft clone that runs entirely in the browser. No build step, no depend
 
 ## Features
 
-- **Infinite procedural terrain** — seeded Perlin-noise world with rolling plains, forests, deserts, beaches, oceans, and snow-capped mountains
-- **Caves & ores** — winding tunnel systems with coal, iron, and diamond ore
+- **Infinite procedural terrain** — seeded Perlin-noise world with rolling plains, forests (oak & birch), spruce-dotted cold biomes, deserts with cacti, beaches, oceans, and snow-capped mountains; flowers, pumpkins, and melons dot the grass
+- **Caves & ores** — winding tunnel systems with coal, iron, gold, redstone, lapis, emerald, and diamond ore, plus gravel pockets and clay under lakes
+- **Building blocks galore** — bricks (smelt clay), sandstone, smooth stone, mossy cobblestone, bookshelves, quartz, nether bricks, glowstone, hay bales, 16 wool colors, and mineral storage blocks (iron/gold/diamond/redstone/lapis/emerald)
+- **Slabs, stairs & more** — real half-slabs (6 kinds) you step onto smoothly, stairs (4 kinds) that auto-face as you place them, connecting oak fences and glass panes, and **torches** that glow in the dark
+- **TNT** — craft it (coal + sand), light it with flint and steel, and run; blasts chain nearby TNT (bedrock and obsidian shrug it off)
 - **Survival mining** — blocks take time to break (with crack animation); stone and ores require a pickaxe of the right tier to drop anything
 - **Minecraft-style inventory** — 36 slots (27 + 9 hotbar) with 64-stack limits, a mouse cursor stack, drag-to-distribute, right-click splitting, shift-click quick-move, double-click collect, tooltips, and Q to drop; craft in the 2×2 grid or build a **crafting table** for the 3×3 grid and advanced recipes
 - **Tools** — pickaxes, axes, and shovels mine their blocks much faster; swords hit harder
 - **Mobs & drops** — pigs, sheep, and cows wander the world and drop food and wool; zombies spawn at night, chase you, and burn at dawn
 - **Hunger** — a Minecraft-style hunger/saturation system: sprinting, jumping, and fighting make you hungry; keep the bar high to regenerate health, let it empty and you'll starve
 - **Food & cooking** — mobs drop raw meat; cook it in a furnace for much better food (plus apples and questionable rotten flesh)
-- **Furnaces & smelting** — craft a furnace (8 cobblestone), fuel it with coal/charcoal/wood, and smelt raw iron → ingots, sand → glass, cobblestone → stone, logs → charcoal; furnaces keep burning while you play
+- **Furnaces & smelting** — craft a furnace (8 cobblestone), fuel it with coal/charcoal/wood, and smelt raw iron & gold → ingots, sand → glass, cobblestone → stone → smooth stone, clay → bricks, netherrack → nether bricks, logs → charcoal; furnaces keep burning while you play
 - **Buckets** — scoop and pour water and lava (lava lakes lurk in the deepest caves — it burns, but it's also a 100-smelt fuel)
 - **Armor** — craft iron and diamond armor sets; equip them in dedicated slots to reduce combat and burn damage
 - **Obsidian & nether portals** — pour water on lava to make obsidian (diamond pickaxe to mine), build a portal frame, light it with flint and steel (iron + coal), and step through
-- **The Nether** — a cavernous netherrack dimension with a lava ocean and **blazes** that hover and hurl fireballs; distance scales 1:8, and blaze rods make great furnace fuel
+- **The Nether** — a cavernous netherrack dimension with a lava ocean, quartz ore, glowstone clusters on the ceiling, and **blazes** that hover and hurl fireballs; distance scales 1:8, and blaze rods make great furnace fuel
 - **Ender pearls & endermen** — tall, night-spawning endermen drop pearls and teleport away when struck; throw pearls (right-click) to teleport yourself
 - **Villages** — plank cabins generate on the plains with **loot chests** (tools, food, materials, the occasional ender pearl); chests are also craftable (8 planks) for storage
 - **Beds** — craft one from 3 wool + 3 planks; right-click to set your spawn point, and sleep through the night
