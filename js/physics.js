@@ -1,23 +1,43 @@
 // Shared AABB-vs-voxel physics for the player and mobs.
 // Entities: pos = feet center {x,y,z}, vel {x,y,z}, half (xz half-width), height.
 
-import { B, BLOCKS, isSolid } from './blocks.js';
+import { B, BLOCKS, isSolid, blockBoxes } from './blocks.js';
 
 const EPS = 0.001;
 const AXES = ['x', 'z', 'y'];
 
-// Collision height of a block (slabs/stairs are half-height).
-const topOf = (id) => (BLOCKS[id] && BLOCKS[id].colHeight) || 1;
+// Collision boxes of a block in cell-local 0..1 coords. Stairs collide with
+// their real two-box shape; slabs (and other colHeight blocks) with a single
+// reduced-height box; everything else with the full cell.
+const FULL_BOX = [{ x0: 0, y0: 0, z0: 0, x1: 1, y1: 1, z1: 1 }];
+const colBoxCache = [];
+function colBoxesOf(id) {
+  let boxes = colBoxCache[id];
+  if (!boxes) {
+    const blk = BLOCKS[id];
+    boxes = blk.shape === 'stairs' ? blockBoxes(id)
+      : blk.colHeight ? [{ x0: 0, y0: 0, z0: 0, x1: 1, y1: blk.colHeight, z1: 1 }]
+        : FULL_BOX;
+    colBoxCache[id] = boxes;
+  }
+  return boxes;
+}
 
 function boxCollides(world, e) {
-  const x0 = Math.floor(e.pos.x - e.half), x1 = Math.floor(e.pos.x + e.half);
-  const y0 = Math.floor(e.pos.y), y1 = Math.floor(e.pos.y + e.height);
-  const z0 = Math.floor(e.pos.z - e.half), z1 = Math.floor(e.pos.z + e.half);
+  const minX = e.pos.x - e.half, maxX = e.pos.x + e.half;
+  const minY = e.pos.y, maxY = e.pos.y + e.height;
+  const minZ = e.pos.z - e.half, maxZ = e.pos.z + e.half;
+  const x0 = Math.floor(minX), x1 = Math.floor(maxX);
+  const y0 = Math.floor(minY), y1 = Math.floor(maxY);
+  const z0 = Math.floor(minZ), z1 = Math.floor(maxZ);
   for (let by = y0; by <= y1; by++)
     for (let bz = z0; bz <= z1; bz++)
       for (let bx = x0; bx <= x1; bx++) {
         const id = world.getBlock(bx, by, bz);
-        if (isSolid(id) && e.pos.y < by + topOf(id)) return true;
+        if (!isSolid(id)) continue;
+        for (const b of colBoxesOf(id))
+          if (bx + b.x0 < maxX && bx + b.x1 > minX && by + b.y0 < maxY &&
+            by + b.y1 > minY && bz + b.z0 < maxZ && bz + b.z1 > minZ) return true;
       }
   return false;
 }
@@ -37,9 +57,12 @@ export function moveEntity(world, e, dt) {
       if (d === 0) continue;
       e.pos[a] += d;
 
-      const x0 = Math.floor(e.pos.x - e.half), x1 = Math.floor(e.pos.x + e.half);
-      const y0 = Math.floor(e.pos.y), y1 = Math.floor(e.pos.y + e.height);
-      const z0 = Math.floor(e.pos.z - e.half), z1 = Math.floor(e.pos.z + e.half);
+      const minX = e.pos.x - e.half, maxX = e.pos.x + e.half;
+      const minY = e.pos.y, maxY = e.pos.y + e.height;
+      const minZ = e.pos.z - e.half, maxZ = e.pos.z + e.half;
+      const x0 = Math.floor(minX), x1 = Math.floor(maxX);
+      const y0 = Math.floor(minY), y1 = Math.floor(maxY);
+      const z0 = Math.floor(minZ), z1 = Math.floor(maxZ);
 
       let collided = false;
       let bound = d > 0 ? Infinity : -Infinity;
@@ -49,14 +72,14 @@ export function moveEntity(world, e, dt) {
           for (let bx = x0; bx <= x1; bx++) {
             const id = world.getBlock(bx, by, bz);
             if (!isSolid(id)) continue;
-            const top = by + topOf(id);
-            if (e.pos.y >= top) continue; // half-block entirely below the entity
-            collided = true;
-            const cell = a === 'x' ? bx : a === 'y' ? by : bz;
-            if (a === 'y') bound = d > 0 ? Math.min(bound, cell) : Math.max(bound, top);
-            else {
-              bound = d > 0 ? Math.min(bound, cell) : Math.max(bound, cell + 1);
-              stepTop = Math.max(stepTop, top);
+            for (const b of colBoxesOf(id)) {
+              if (bx + b.x0 >= maxX || bx + b.x1 <= minX || by + b.y0 >= maxY ||
+                by + b.y1 <= minY || bz + b.z0 >= maxZ || bz + b.z1 <= minZ) continue;
+              collided = true;
+              const lo = a === 'x' ? bx + b.x0 : a === 'y' ? by + b.y0 : bz + b.z0;
+              const hi = a === 'x' ? bx + b.x1 : a === 'y' ? by + b.y1 : bz + b.z1;
+              bound = d > 0 ? Math.min(bound, lo) : Math.max(bound, hi);
+              if (a !== 'y') stepTop = Math.max(stepTop, by + b.y1);
             }
           }
         }
