@@ -40,6 +40,7 @@ export const sfx = {
   bow: () => { tone('sawtooth', 180, 700, 0.14, 0.1); tone('square', 90, 420, 0.1, 0.05); },
   portal: () => { tone('sine', 120, 480, 0.8, 0.15); setTimeout(() => tone('sine', 480, 90, 0.6, 0.12), 300); },
   fuse: () => tone('square', 2200, 1400, 0.25, 0.05),
+  door: () => { tone('square', 320, 210, 0.05, 0.1); setTimeout(() => tone('square', 250, 170, 0.06, 0.09), 45); },
   explode: () => {
     tone('sawtooth', 110, 24, 0.7, 0.35);
     tone('square', 55, 18, 0.8, 0.3);

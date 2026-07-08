@@ -387,9 +387,9 @@ export class World {
         set(hx + dx, hy + 4, hz + dz, B.PLANK); // roof
       }
     }
-    // doorway on the south face, windows on east/west
-    set(hx, hy + 1, hz - 2, B.AIR);
-    set(hx, hy + 2, hz - 2, B.AIR);
+    // doorway with a door on the south face, windows on east/west
+    set(hx, hy + 1, hz - 2, B.DOOR + 3); // closed, panel flush with the south wall
+    set(hx, hy + 2, hz - 2, B.DOOR_TOP);
     set(hx - 2, hy + 2, hz, B.GLASS);
     set(hx + 2, hy + 2, hz, B.GLASS);
     set(hx - 1, hy + 1, hz + 1, B.TORCH);
@@ -528,7 +528,16 @@ export class World {
               isOpaque(get(lx, y + 1, lz)), isOpaque(get(lx, y - 1, lz)),
               isOpaque(get(lx, y, lz + 1)), isOpaque(get(lx, y, lz - 1)),
             ];
-            for (const box of blockBoxes(id, conn)) emitBox(buf, lx, y, lz, box, cull);
+            let boxes = blockBoxes(id, conn);
+            if (blk.doorTop) {
+              // door tops mirror the bottom half's facing/swing, with their own texture
+              const below = get(lx, y - 1, lz);
+              const bblk = BLOCKS[below];
+              if (bblk && bblk.shape === 'door' && !bblk.doorTop) {
+                boxes = blockBoxes(below).map(b => ({ ...b, top: blk.top, bottom: blk.bottom, side: blk.side }));
+              }
+            }
+            for (const box of boxes) emitBox(buf, lx, y, lz, box, cull);
             continue;
           }
 

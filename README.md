@@ -8,6 +8,7 @@ A 3D Minecraft clone that runs entirely in the browser. No build step, no depend
 - **Caves & ores** — winding tunnel systems with coal, iron, gold, redstone, lapis, emerald, and diamond ore, plus gravel pockets and clay under lakes
 - **Building blocks galore** — bricks (smelt clay), sandstone, smooth stone, mossy cobblestone, bookshelves, quartz, nether bricks, glowstone, hay bales, 16 wool colors, and mineral storage blocks (iron/gold/diamond/redstone/lapis/emerald)
 - **Slabs, stairs & more** — real half-slabs (6 kinds) you step onto smoothly, stairs (4 kinds) that auto-face as you place them, connecting oak fences and glass panes, and **torches** that glow in the dark
+- **Ladders & doors** — ladders (7 sticks) mount on walls and climb at authentic Minecraft speed (sneak to hang on, no fall damage); oak doors (6 planks) fill two blocks, face you when placed, and open/close with a right-click
 - **TNT** — craft it (coal + sand), light it with flint and steel, and run; blasts chain nearby TNT (bedrock and obsidian shrug it off)
 - **Survival mining** — blocks take time to break (with crack animation); stone and ores require a pickaxe of the right tier to drop anything
 - **Minecraft-style inventory** — 36 slots (27 + 9 hotbar) with 64-stack limits, a mouse cursor stack, drag-to-distribute, right-click splitting, shift-click quick-move, double-click collect, tooltips, and Q to drop; craft in the 2×2 grid or build a **crafting table** for the 3×3 grid and advanced recipes
@@ -21,7 +22,7 @@ A 3D Minecraft clone that runs entirely in the browser. No build step, no depend
 - **Obsidian & nether portals** — pour water on lava to make obsidian (diamond pickaxe to mine), build a portal frame, light it with flint and steel (iron + coal), and step through
 - **The Nether** — a cavernous netherrack dimension with a lava ocean, quartz ore, glowstone clusters on the ceiling, and **blazes** that hover and hurl fireballs; distance scales 1:8, and blaze rods make great furnace fuel
 - **Ender pearls & endermen** — tall, night-spawning endermen drop pearls and teleport away when struck; throw pearls (right-click) to teleport yourself
-- **Villages** — plank cabins generate on the plains with **loot chests** (tools, food, materials, the occasional ender pearl); chests are also craftable (8 planks) for storage
+- **Villages** — plank cabins with doors and torch-lit interiors generate on the plains, holding **loot chests** (tools, food, materials, the occasional ender pearl); chests are also craftable (8 planks) for storage
 - **Beds** — craft one from 3 wool + 3 planks; right-click to set your spawn point, and sleep through the night
 - **The stronghold & the End** — a hidden underground chamber holds the dormant End portal; throw **Eyes of Ender** (right-click) and follow their flight to find it, then socket 12 eyes into the frame ring (blaze rod → blaze powder; powder + pearl → eye); drop through to a floating end-stone island where the **Ender Dragon** circles the obsidian pillars and swoops at you; slay it to open the exit portal and claim the dragon egg
 - **Critical hits** — attack while falling for 1.5× damage with a spark burst, just like Minecraft (jump, then swing on the way down)

@@ -21,6 +21,9 @@ export const B = {
   // stairs occupy 4 ids each (one per horizontal facing); the first is the item
   OAK_STAIRS: 74, COBBLE_STAIRS: 78, STONE_BRICK_STAIRS: 82, BRICK_STAIRS: 86,
   // colored wool: 90..104 (see WOOL_COLORS)
+  LADDER: 105, // 4 facings: 105..108
+  DOOR: 109,   // bottom halves: closed 109..112, open 113..116 (by facing)
+  DOOR_TOP: 117, DOOR_TOP_OPEN: 118,
 };
 
 export const TILE = {
@@ -45,6 +48,7 @@ export const TILE = {
   ICON_SLAB_OAK: 92, ICON_SLAB_COBBLE: 93, ICON_SLAB_STONE: 94,
   ICON_SLAB_STONE_BRICK: 95, ICON_SLAB_BRICK: 96, ICON_SLAB_SANDSTONE: 97,
   ICON_STAIR_OAK: 98, ICON_STAIR_COBBLE: 99, ICON_STAIR_STONE_BRICK: 100, ICON_STAIR_BRICK: 101,
+  LADDER: 102, DOOR_BOTTOM: 103, DOOR_TOP: 104, ICON_DOOR: 105,
 };
 
 export const WOOL_COLORS = [
@@ -171,6 +175,41 @@ WOOL_COLORS.forEach(([wname], i) => {
   WOOL_IDS.push(WOOL_ID0 + i);
 });
 
+// ladders: climbable, attached flat against the wall on side STAIR_DIRS[facing]
+{
+  const facings = [B.LADDER, B.LADDER + 1, B.LADDER + 2, B.LADDER + 3];
+  for (let i = 0; i < 4; i++) {
+    def(facings[i], 'Ladder', TILE.LADDER, TILE.LADDER, TILE.LADDER, {
+      shape: 'ladder', solid: false, opaque: false, climb: true,
+      facing: i, facings, item: B.LADDER, hidden: i > 0,
+    });
+  }
+}
+
+// doors: two blocks tall. Bottom ids encode facing + open state; the top halves
+// borrow the bottom's geometry at mesh time (they only carry solidity + texture).
+{
+  const facings = [B.DOOR, B.DOOR + 1, B.DOOR + 2, B.DOOR + 3];
+  for (let i = 0; i < 4; i++) {
+    def(B.DOOR + i, 'Oak Door', TILE.DOOR_BOTTOM, TILE.DOOR_BOTTOM, TILE.DOOR_BOTTOM, {
+      shape: 'door', opaque: false, doorPart: true, icon: TILE.ICON_DOOR,
+      facing: i, facings, item: B.DOOR, hidden: i > 0, toggleId: B.DOOR + 4 + i,
+    });
+    def(B.DOOR + 4 + i, 'Oak Door', TILE.DOOR_BOTTOM, TILE.DOOR_BOTTOM, TILE.DOOR_BOTTOM, {
+      shape: 'door', solid: false, opaque: false, doorPart: true, open: true,
+      facing: i, facings, item: B.DOOR, hidden: true, toggleId: B.DOOR + i,
+    });
+  }
+  def(B.DOOR_TOP, 'Oak Door', TILE.DOOR_TOP, TILE.DOOR_TOP, TILE.DOOR_TOP, {
+    shape: 'door', opaque: false, doorPart: true, doorTop: true,
+    facing: 0, item: B.DOOR, hidden: true, toggleId: B.DOOR_TOP_OPEN,
+  });
+  def(B.DOOR_TOP_OPEN, 'Oak Door', TILE.DOOR_TOP, TILE.DOOR_TOP, TILE.DOOR_TOP, {
+    shape: 'door', solid: false, opaque: false, doorPart: true, doorTop: true, open: true,
+    facing: 0, item: B.DOOR, hidden: true, toggleId: B.DOOR_TOP,
+  });
+}
+
 export const isSolid = (id) => !!(BLOCKS[id] && BLOCKS[id].solid);
 export const isOpaque = (id) => !!(BLOCKS[id] && BLOCKS[id].opaque);
 
@@ -203,6 +242,17 @@ export function blockBoxes(id, conn = null) {
       ];
     }
     case 'cactus': return [bx(1 / 16, 0, 1 / 16, 15 / 16, 1, 15 / 16)];
+    case 'ladder':
+    case 'door': {
+      // a thin panel flush against one cell wall; open doors swing 90°
+      const f = blk.open ? (blk.facing + 1) % 4 : blk.facing;
+      const [dx, dz] = STAIR_DIRS[f];
+      const t = blk.shape === 'ladder' ? 1 / 16 : 3 / 16;
+      if (dx > 0) return [bx(1 - t, 0, 0, 1, 1, 1)];
+      if (dx < 0) return [bx(0, 0, 0, t, 1, 1)];
+      if (dz > 0) return [bx(0, 0, 1 - t, 1, 1, 1)];
+      return [bx(0, 0, 0, 1, 1, t)];
+    }
     case 'fence': {
       const c = conn || {};
       const boxes = [bx(6 / 16, 0, 6 / 16, 10 / 16, 1, 10 / 16)];
@@ -613,6 +663,31 @@ export function buildAtlas() {
       if (post && y >= 1) return [...jitter([158, 128, 79], 8), 255];
       if (rail) return [...jitter([139, 108, 62], 8), 255];
       return [0, 0, 0, 0];
+    },
+    [TILE.LADDER]: (x, y) => {
+      if ((x >= 2 && x <= 3) || (x >= 12 && x <= 13)) return [...jitter([140, 108, 62], 7), 255];
+      if (y % 4 === 2 && x >= 2 && x <= 13) return [...jitter([160, 126, 74], 7), 255];
+      return [0, 0, 0, 0];
+    },
+    [TILE.DOOR_BOTTOM]: (x, y) => {
+      if (x === 0 || x === 15 || y === 15) return [...jitter([96, 74, 45], 5), 255];
+      if (x >= 12 && x <= 13 && y >= 2 && y <= 3) return [192, 192, 198, 255]; // handle
+      if (x === 7 || x === 8 || y === 7 || y === 8) return [...jitter([114, 88, 52], 6), 255];
+      return [...jitter([150, 116, 68], 8), 255];
+    },
+    [TILE.DOOR_TOP]: (x, y) => {
+      if (x === 0 || x === 15 || y === 0) return [...jitter([96, 74, 45], 5), 255];
+      if (y >= 2 && y <= 5 && ((x >= 2 && x <= 5) || (x >= 10 && x <= 13)))
+        return [202, 228, 236, 255]; // window panes
+      if (x === 7 || x === 8 || y === 7 || y === 8) return [...jitter([114, 88, 52], 6), 255];
+      return [...jitter([150, 116, 68], 8), 255];
+    },
+    [TILE.ICON_DOOR]: (x, y) => {
+      if (x < 3 || x > 12) return [0, 0, 0, 0];
+      if (x === 3 || x === 12 || y === 0 || y === 15 || y === 7) return [...jitter([104, 80, 48], 5), 255];
+      if (y >= 2 && y <= 5 && x >= 5 && x <= 10) return [202, 228, 236, 255];
+      if (x >= 10 && x <= 11 && y >= 9 && y <= 10) return [192, 192, 198, 255]; // knob
+      return [...jitter([150, 116, 68], 7), 255];
     },
   };
   WOOL_COLORS.forEach(([, rgb], i) => { painters[TILE.WOOL0 + i] = woolP(rgb); });

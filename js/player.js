@@ -58,6 +58,7 @@ export class Player {
     this.wantSprint = false;
     this.onGround = false;
     this.inWater = false;
+    this.onLadder = false;
     this.eyeInWater = false;
     this.fallDist = 0;
     this.jumpDelay = 0;
@@ -147,6 +148,11 @@ export class Player {
     this.inLava = isLavaAt(this.world, this.pos.x, this.pos.y + 0.4, this.pos.z)
       || isLavaAt(this.world, this.pos.x, this.pos.y, this.pos.z);
     this.eyeInWater = isWaterAt(this.world, this.pos.x, this.pos.y + this.eyeH, this.pos.z);
+    const climbAt = (yy) => {
+      const blk = BLOCKS[this.world.getBlock(Math.floor(this.pos.x), Math.floor(yy), Math.floor(this.pos.z))];
+      return !!(blk && blk.climb);
+    };
+    this.onLadder = !this.fly && (climbAt(this.pos.y + 0.05) || climbAt(this.pos.y + 1));
 
     // --- input ---
     const f = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0);
@@ -218,6 +224,9 @@ export class Player {
     // hop out of liquid at edges
     if ((this.inWater || this.inLava) && jump && res.hitWall) vy = 0.3;
 
+    // ladders: pressing into the wall climbs (0.2/t -> ~2.35 b/s after gravity)
+    if (this.onLadder && res.hitWall && !this.inWater && !this.inLava) vy = Math.max(vy, 0.2);
+
     // --- gravity & friction (post-move, MC order) ---
     if (this.fly) {
       // handled by the approach blend above
@@ -232,6 +241,11 @@ export class Player {
       vx *= fr;
       vz *= fr;
     }
+    // ladders cap the slide to 3 b/s; sneaking hangs on
+    if (this.onLadder && !this.fly) {
+      if (vy < -0.15) vy = -0.15;
+      if (this.sneaking && vy < 0) vy = 0;
+    }
     this.vel = { x: vx * BPS, y: vy * BPS, z: vz * BPS };
 
     // --- eye height transition (sneak) ---
@@ -240,7 +254,7 @@ export class Player {
 
     // --- fall damage ---
     const fell = this.prevPos.y - this.pos.y;
-    if (this.fly || this.inWater || this.inLava) this.fallDist = 0;
+    if (this.fly || this.inWater || this.inLava || this.onLadder) this.fallDist = 0;
     else if (fell > 0) this.fallDist += fell;
     if (this.onGround) {
       if (this.fallDist > 3.5) this.damage(Math.floor(this.fallDist - 3), time, 'fall');

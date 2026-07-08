@@ -166,6 +166,8 @@ export const FUEL = {
   [B.FENCE]: 15,
   [B.OAK_SLAB]: 7,
   [B.OAK_STAIRS]: 15,
+  [B.LADDER]: 5,
+  [B.DOOR]: 10,
   [I.STICK]: 5,
   [I.BLAZE_ROD]: 60,
   [I.LAVA_BUCKET]: 1000,
@@ -248,6 +250,8 @@ export const MINING = {
   [B.COBBLE_STAIRS]: { hand: 10, tool: 'pickaxe', tier: 1, drop: () => [B.COBBLE_STAIRS, 1] },
   [B.STONE_BRICK_STAIRS]: { hand: 7.5, tool: 'pickaxe', tier: 1, drop: () => [B.STONE_BRICK_STAIRS, 1] },
   [B.BRICK_STAIRS]: { hand: 10, tool: 'pickaxe', tier: 1, drop: () => [B.BRICK_STAIRS, 1] },
+  [B.LADDER]: { hand: 0.6, tool: 'axe', tier: 0, drop: () => [B.LADDER, 1] },
+  [B.DOOR]: { hand: 4.5, tool: 'axe', tier: 0, drop: () => [B.DOOR, 1] },
 };
 
 // stair facing variants break like their base block; colored wool like wool
@@ -359,6 +363,8 @@ export const RECIPES = [
   ...stairRecipes,
   shaped(B.FENCE, 3, ['PSP', 'PSP'], { P: B.PLANK, S: I.STICK }),
   shaped(B.GLASS_PANE, 16, ['GGG', 'GGG'], { G: B.GLASS }),
+  shaped(B.LADDER, 3, ['S.S', 'SSS', 'S.S'], { S: I.STICK }),
+  shaped(B.DOOR, 3, ['PP', 'PP', 'PP'], { P: B.PLANK }),
   shaped(B.BOOKSHELF, 1, ['PPP', '...', 'PPP'], { P: B.PLANK }),
   shaped(B.TNT, 1, ['CSC', 'SCS', 'CSC'], { C: I.COAL, S: B.SAND }),
   shaped(B.IRON_BLOCK, 1, ['III', 'III', 'III'], { I: I.IRON_INGOT }),

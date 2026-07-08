@@ -1750,6 +1750,12 @@ function finishBreak(hit, info) {
   player.exhaustion += 0.005;
   // ice melts back into water below sea level
   world.setBlock(hit.x, hit.y, hit.z, (hit.id === B.ICE && hit.y <= SEA) ? B.WATER : B.AIR);
+  // doors break as a pair (only the broken half drops)
+  if (BLOCKS[hit.id].doorPart) {
+    const oy = BLOCKS[hit.id].doorTop ? hit.y - 1 : hit.y + 1;
+    const other = world.getBlock(hit.x, oy, hit.z);
+    if (BLOCKS[other] && BLOCKS[other].doorPart) world.setBlock(hit.x, oy, hit.z, B.AIR);
+  }
   // breaking the frame extinguishes attached portal blocks
   if (hit.id === B.OBSIDIAN) {
     const stack = DIRS6.map(d => [hit.x + d[0], hit.y + d[1], hit.z + d[2]]);
@@ -1929,6 +1935,19 @@ function useHeld() {
       openInventory('chest', dimPrefix() + chests.key(hit.x, hit.y, hit.z), { x: hit.x, y: hit.y, z: hit.z });
       return;
     }
+    if (BLOCKS[hit.id].doorPart) {
+      placingHeld = false;
+      const by = BLOCKS[hit.id].doorTop ? hit.y - 1 : hit.y;
+      const bot = world.getBlock(hit.x, by, hit.z);
+      const bblk = BLOCKS[bot];
+      if (bblk && bblk.shape === 'door' && !bblk.doorTop) {
+        world.setBlock(hit.x, by, hit.z, bblk.toggleId);
+        const top = world.getBlock(hit.x, by + 1, hit.z);
+        if (BLOCKS[top] && BLOCKS[top].doorTop) world.setBlock(hit.x, by + 1, hit.z, BLOCKS[top].toggleId);
+        sfx.door();
+      }
+      return;
+    }
     if (hit.id === B.BED) {
       placingHeld = false;
       if (dim !== 'overworld') { toast('You can only sleep in the overworld'); return; }
@@ -1960,8 +1979,29 @@ function useHeld() {
     if (!world.hasDataAt(px, pz)) return;
     // torches, flowers and cacti need a solid block underneath
     if (BLOCKS[id].needSupport && !isSolid(world.getBlock(px, py - 1, pz))) return;
+    // doors fill two cells: place the bottom + matching top, panel toward you
+    if (BLOCKS[id].shape === 'door') {
+      if (py + 1 >= HEIGHT) return;
+      const above = world.getBlock(px, py + 1, pz);
+      if (above !== B.AIR && above !== B.WATER) return;
+      if (!isSolid(world.getBlock(px, py - 1, pz))) return;
+      if (blockOverlapsEntity(px, py + 1, pz, player) || mobs.anyOverlapping(px, py + 1, pz)) return;
+      const d = player.forwardDir();
+      const f = Math.abs(d.x) > Math.abs(d.z) ? (d.x > 0 ? 2 : 0) : (d.z > 0 ? 3 : 1);
+      swingT = 0;
+      world.setBlock(px, py, pz, BLOCKS[id].facings[f]);
+      world.setBlock(px, py + 1, pz, B.DOOR_TOP);
+      consumeHeld();
+      sfx.place();
+      return;
+    }
     let placeId = id;
-    if (BLOCKS[id].facings) {
+    if (BLOCKS[id].shape === 'ladder') {
+      // ladders hang on a solid wall: must click a side face
+      if (hit.face[1] !== 0 || !isSolid(hit.id)) return;
+      const fx = -hit.face[0], fz = -hit.face[2];
+      placeId = BLOCKS[id].facings[fx > 0 ? 0 : fx < 0 ? 2 : fz > 0 ? 1 : 3];
+    } else if (BLOCKS[id].facings) {
       // stairs: the high step lands on the far side, ascending away from you
       const d = player.forwardDir();
       placeId = BLOCKS[id].facings[Math.abs(d.x) > Math.abs(d.z) ? (d.x > 0 ? 0 : 2) : (d.z > 0 ? 1 : 3)];
