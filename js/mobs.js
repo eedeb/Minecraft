@@ -15,6 +15,7 @@ const DROP_TABLE = {
   spider: [[I.STRING, 0, 2]],
   blaze: [[I.BLAZE_ROD, 0, 1]],
   enderman: [[I.ENDER_PEARL, 1, 2]],
+  creeper: [[I.GUNPOWDER, 0, 2]],
 };
 
 const GRAVITY = 26;
@@ -27,6 +28,7 @@ const TYPES = {
   spider: { hp: 16, speed: 2.9, half: 0.6, height: 0.9, color: 0x352a24, dmg: 2 },
   blaze: { hp: 20, speed: 1.6, half: 0.35, height: 1.6, color: 0xe8a428 },
   enderman: { hp: 40, speed: 3.4, half: 0.35, height: 2.9, color: 0xbb44dd, dmg: 5 },
+  creeper: { hp: 20, speed: 1.85, half: 0.3, height: 1.7, color: 0x4aa84a },
 };
 
 function box(w, h, d, color, x, y, z) {
@@ -146,6 +148,23 @@ const MODELS = {
     legs.forEach(l => g.add(l));
     return { legs, head };
   },
+  creeper(g) {
+    const green = 0x4aa84a, dark = 0x2f7a3f, face = 0x1a3a1a;
+    const legs = [
+      leg(0.22, 0.4, dark, -0.28, 0.4, -0.28), leg(0.22, 0.4, dark, 0.28, 0.4, -0.28),
+      leg(0.22, 0.4, dark, -0.28, 0.4, 0.28), leg(0.22, 0.4, dark, 0.28, 0.4, 0.28),
+    ];
+    legs.forEach(l => g.add(l));
+    g.add(box(0.65, 0.85, 0.4, green, 0, 1.02, 0));
+    const head = box(0.5, 0.5, 0.5, green, 0, 1.65, 0);
+    head.add(box(0.1, 0.1, 0.02, face, -0.12, 0.08, -0.26));
+    head.add(box(0.1, 0.1, 0.02, face, 0.12, 0.08, -0.26));
+    head.add(box(0.08, 0.1, 0.02, face, 0, -0.05, -0.26));
+    head.add(box(0.08, 0.16, 0.02, face, -0.08, -0.14, -0.26));
+    head.add(box(0.08, 0.16, 0.02, face, 0.08, -0.14, -0.26));
+    g.add(head);
+    return { legs, head };
+  },
   zombie(g) {
     const skin = 0x5da357, shirt = 0x2f7ba6, pants = 0x35506e;
     const legs = [
@@ -170,9 +189,11 @@ export class Mob {
     const t = TYPES[type];
     this.id = nextId++;
     this.type = type;
-    this.hostile = type === 'zombie' || type === 'blaze' || type === 'enderman' || type === 'spider';
+    this.hostile = type === 'zombie' || type === 'blaze' || type === 'enderman' || type === 'spider' || type === 'creeper';
     this.flying = type === 'blaze';
     this.shootCd = 2 + Math.random() * 2;
+    this.fuseT = 0;
+    this.hissed = false;
     this.hp = t.hp;
     this.speed = t.speed;
     this.half = t.half;
@@ -239,8 +260,9 @@ export class Mob {
       const dx = player.pos.x - this.pos.x, dz = player.pos.z - this.pos.z;
       const dist = Math.hypot(dx, dz);
       const spider = this.type === 'spider';
-      // burn in daylight (spiders don't burn — they just turn docile)
-      if (daylight > 0.5 && !spider) {
+      const creeper = this.type === 'creeper';
+      // burn in daylight (spiders don't burn — they just turn docile; creepers never burn)
+      if (daylight > 0.5 && !spider && !creeper) {
         this.burnT += dt;
         if (this.burnT > 0.4) {
           this.hp -= 3 * dt;
@@ -252,20 +274,44 @@ export class Mob {
       const docile = spider && daylight > 0.5 && this.hp >= TYPES.spider.hp;
       if (!player.dead && !player.creative && !docile && dist < 24) {
         this.targetYaw = Math.atan2(-dx, -dz);
-        wantSpeed = this.speed;
-        const dy = Math.abs((player.pos.y) - this.pos.y);
-        if (dist < 1.6 && dy < 2 && this.attackCd <= 0) {
-          this.attackCd = 1.1;
-          player.damage(TYPES[this.type].dmg || 3, time, 'attack');
-          // knock the player back
-          const kx = dx / (dist || 1), kz = dz / (dist || 1);
-          player.vel.x += kx * 7;
-          player.vel.z += kz * 7;
-          player.vel.y += 3.5;
-          if (ctx.sfx) ctx.sfx.hurt();
+        if (creeper) {
+          const igniteRange = 3;
+          if (dist < igniteRange) {
+            wantSpeed = 0;
+            this.fuseT += dt;
+          } else {
+            wantSpeed = this.speed;
+            this.fuseT = Math.max(0, this.fuseT - dt * 2); // backing away fizzles the fuse
+          }
+          if (this.fuseT > 0 && !this.hissed) {
+            this.hissed = true;
+            if (ctx.sfx) ctx.sfx.fuse();
+          } else if (this.fuseT <= 0) {
+            this.hissed = false;
+          }
+          if (this.fuseT >= 1.5) {
+            this.dead = true;
+            if (ctx.explode) {
+              ctx.explode(Math.floor(this.pos.x), Math.floor(this.pos.y), Math.floor(this.pos.z), 3.2);
+            }
+          }
+        } else {
+          wantSpeed = this.speed;
+          const dy = Math.abs((player.pos.y) - this.pos.y);
+          if (dist < 1.6 && dy < 2 && this.attackCd <= 0) {
+            this.attackCd = 1.1;
+            player.damage(TYPES[this.type].dmg || 3, time, 'attack');
+            // knock the player back
+            const kx = dx / (dist || 1), kz = dz / (dist || 1);
+            player.vel.x += kx * 7;
+            player.vel.z += kz * 7;
+            player.vel.y += 3.5;
+            if (ctx.sfx) ctx.sfx.hurt();
+          }
         }
       } else {
         wantSpeed = this.wander(dt);
+        if (creeper) this.fuseT = Math.max(0, this.fuseT - dt * 2);
       }
     } else {
       wantSpeed = this.wander(dt);
@@ -320,6 +366,7 @@ export class Mob {
 
     this.group.position.set(this.pos.x, this.pos.y, this.pos.z);
     this.group.rotation.y = this.yaw;
+    if (this.type === 'creeper') this.group.scale.setScalar(1 + Math.min(this.fuseT, 1.5) / 1.5 * 0.65);
 
     // hurt/burn flash
     if (this.flashT > 0) {
@@ -327,6 +374,11 @@ export class Mob {
       const red = this.burnT > 0.4 ? 0xff7722 : 0xff3333;
       this.mats.forEach(({ m }) => m.color.setHex(red));
       if (this.flashT <= 0) this.mats.forEach(({ m, c }) => m.color.setHex(c));
+    } else if (this.type === 'creeper' && this.fuseT > 0) {
+      const flash = Math.floor(this.fuseT * 12) % 2 === 0;
+      this.mats.forEach(({ m, c }) => m.color.setHex(flash ? 0xffffff : c));
+    } else if (this.type === 'creeper') {
+      this.mats.forEach(({ m, c }) => m.color.setHex(c));
     }
   }
 
@@ -392,6 +444,7 @@ export class MobManager {
     this.zombieCap = 6;
     this.spiderCap = 4;
     this.blazeCap = 5;
+    this.creeperCap = 5;
   }
 
   // hide/show everything when the player switches dimension
@@ -515,11 +568,13 @@ export class MobManager {
     const zombies = this.mobs.filter(m => m.type === 'zombie').length;
     const spiders = this.mobs.filter(m => m.type === 'spider').length;
     const endermen = this.mobs.filter(m => m.type === 'enderman').length;
+    const creepers = this.mobs.filter(m => m.type === 'creeper').length;
 
     let type = null;
     if (night && Math.random() < 0.75) {
       if (endermen < 2 && Math.random() < 0.22) type = 'enderman';
       else if (spiders < this.spiderCap && Math.random() < 0.35) type = 'spider';
+      else if (creepers < this.creeperCap && Math.random() < 0.35) type = 'creeper';
       else if (zombies < this.zombieCap) type = 'zombie';
     } else if (passives < this.passiveCap) {
       type = ['pig', 'sheep', 'cow'][(Math.random() * 3) | 0];

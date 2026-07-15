@@ -2335,7 +2335,7 @@ function frame(dt) {
   const paused = invOpen && invMode !== 'furnace' && invMode !== 'chest'; // containers run in real time
   if ((started || forceStarted) && !paused) {
     player.update(dt, isLocked() ? keys : new Set(), time);
-    mobs.update(dt, { world, player, daylight, time, sfx, particles, drops });
+    mobs.update(dt, { world, player, daylight, time, sfx, particles, drops, explode });
     drops.update(dt, { player, inventory, onPickup: () => sfx.pickup() });
     if (furnaces.tick(dt) && invOpen && invMode === 'furnace') renderInvScreen();
     if (dim === 'end' && dragon && !dragon.dead) dragon.update(dt, { player, time, sfx, particles });

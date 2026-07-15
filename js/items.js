@@ -21,6 +21,7 @@ export const I = {
   BLAZE_POWDER: 245, EYE_OF_ENDER: 246,
   STRING: 247, BOW: 248, ARROW: 249,
   GOLD_INGOT: 250, RAW_GOLD: 251, REDSTONE: 252, LAPIS: 253, EMERALD: 254, QUARTZ: 255,
+  GUNPOWDER: 256,
 };
 
 export const ARMOR_SLOTS = ['head', 'chest', 'legs', 'feet'];
@@ -69,6 +70,7 @@ ITEMS[I.ENDER_PEARL] = mat('Ender Pearl', 'pearl', { stack: 16 }); // right-clic
 ITEMS[I.BLAZE_POWDER] = mat('Blaze Powder', 'material');
 ITEMS[I.EYE_OF_ENDER] = mat('Eye of Ender', 'eye'); // sockets into End portal frames
 ITEMS[I.STRING] = mat('String', 'material'); // dropped by spiders
+ITEMS[I.GUNPOWDER] = mat('Gunpowder', 'material'); // dropped by creepers
 ITEMS[I.BOW] = mat('Bow', 'bow', { stack: 1 }); // right-click to shoot arrows
 ITEMS[I.ARROW] = mat('Arrow', 'material');
 ITEMS[I.BUCKET] = mat('Bucket', 'bucket', { liquid: null, stack: 1 });
@@ -650,6 +652,7 @@ ITEM_STENCILS[I.REDSTONE] = { rows: ITEM_STENCILS[I.BLAZE_POWDER].rows, pal: { g
 ITEM_STENCILS[I.LAPIS] = { rows: ITEM_STENCILS[I.COAL].rows, pal: { c: '#2e52b4', l: '#5e86e0', d: '#1e3680' } };
 ITEM_STENCILS[I.EMERALD] = { rows: ITEM_STENCILS[I.DIAMOND].rows, pal: { m: '#3ecf6e', d: '#2a9a4e', l: '#b0ffcc' } };
 ITEM_STENCILS[I.QUARTZ] = { rows: ITEM_STENCILS[I.DIAMOND].rows, pal: { m: '#ece8e0', d: '#c0b8ac', l: '#ffffff' } };
+ITEM_STENCILS[I.GUNPOWDER] = { rows: ITEM_STENCILS[I.COAL].rows, pal: { c: '#5a5a52', l: '#7c7c70', d: '#3c3c36' } };
 
 const ARMOR_STENCILS = {
   head: [
