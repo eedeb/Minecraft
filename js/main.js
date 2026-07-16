@@ -1583,7 +1583,6 @@ document.addEventListener('mousemove', (e) => {
   if (locked) player.look(e.movementX, e.movementY);
 });
 
-let lastWRelease = -1;
 let lastSpaceDown = -1;
 document.addEventListener('keydown', (e) => {
   if (invOpen) {
@@ -1606,12 +1605,6 @@ document.addEventListener('keydown', (e) => {
   e.preventDefault(); // with keyboard lock active, keep every shortcut in-game
   // with the keyboard locked (fullscreen), Esc reaches us instead of the browser
   if (e.code === 'Escape') { document.exitPointerLock(); return; }
-  // double-tap W to sprint: MC-style — arm if W is pressed shortly after it
-  // was RELEASED, so re-tapping while already walking also works
-  if (e.code === 'KeyW' && !e.repeat) {
-    const now = performance.now() / 1000;
-    if (now - lastWRelease < 0.35) player.wantSprint = true;
-  }
   // double-tap Space toggles creative flight, like Minecraft
   if (e.code === 'Space' && !e.repeat) {
     const now = performance.now() / 1000;
@@ -1637,7 +1630,6 @@ document.addEventListener('keydown', (e) => {
 });
 document.addEventListener('keyup', (e) => {
   keys.delete(e.code);
-  if (e.code === 'KeyW') lastWRelease = performance.now() / 1000;
 });
 window.addEventListener('blur', () => { keys.clear(); breakingHeld = placingHeld = false; });
 

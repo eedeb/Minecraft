@@ -55,7 +55,6 @@ export class Player {
     this.fly = false;
     this.sneaking = false;
     this.sprinting = false;
-    this.wantSprint = false;
     this.onGround = false;
     this.inWater = false;
     this.onLadder = false;
@@ -160,10 +159,9 @@ export class Player {
     const jump = keys.has('Space');
     const shift = keys.has('ShiftLeft') || keys.has('ShiftRight');
     this.sneaking = shift && !this.fly;
-    // sprint: Ctrl while moving forward, or double-tap W (set by the input layer)
-    if ((keys.has('ControlLeft') || keys.has('ControlRight')) && f > 0) this.wantSprint = true;
-    if (f <= 0 || this.sneaking) this.wantSprint = false;
-    this.sprinting = this.wantSprint && !this.fly && !this.inWater && this.hunger > 6;
+    // sprint: hold Ctrl while moving forward
+    const ctrl = keys.has('ControlLeft') || keys.has('ControlRight');
+    this.sprinting = ctrl && f > 0 && !this.sneaking && !this.fly && !this.inWater && this.hunger > 6;
 
     const fwdX = -Math.sin(this.yaw), fwdZ = -Math.cos(this.yaw);
     const rightX = Math.cos(this.yaw), rightZ = -Math.sin(this.yaw);
