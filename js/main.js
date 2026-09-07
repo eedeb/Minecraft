@@ -864,9 +864,6 @@ function renderHotbar() {
         slot.appendChild(cnt);
       }
     }
-    const num = document.createElement('span');
-    num.textContent = i + 1;
-    slot.appendChild(num);
     hotbarEl.appendChild(slot);
   }
 }
