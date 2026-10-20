@@ -316,6 +316,8 @@ export class Player {
     if (this.creative) return; // invulnerable
     if (this.dead || n <= 0) return;
     if (time - this.lastDamage < 0.5) return; // brief invulnerability
+    // A raised shield strongly reduces direct attacks.
+    if (this.shielding && type === 'attack') n = Math.max(1, Math.round(n * 0.2));
     // armor reduces combat/burn damage (4% per point, capped 80%)
     if (type === 'attack' || type === 'lava' || type === 'fire') {
       const reduction = Math.min(0.8, this.armorPoints * 0.04);

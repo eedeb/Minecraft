@@ -1628,7 +1628,7 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('keyup', (e) => {
   keys.delete(e.code);
 });
-window.addEventListener('blur', () => { keys.clear(); breakingHeld = placingHeld = false; });
+window.addEventListener('blur', () => { keys.clear(); breakingHeld = placingHeld = false; player.shielding = false; });
 
 // non-passive so we can block Ctrl+scroll / pinch browser zoom while playing
 document.addEventListener('wheel', (e) => {
@@ -1649,11 +1649,14 @@ canvas.addEventListener('mousedown', (e) => {
   if (!isLocked() || invOpen) return;
   if (e.button === 0) breakingHeld = true;
   if (e.button === 1) { e.preventDefault(); pickBlock(); }
-  if (e.button === 2) { placingHeld = true; useHeld(); placeCd = 0.25; }
+  if (e.button === 2) {
+    if (heldId() === I.SHIELD) { player.shielding = true; return; }
+    placingHeld = true; useHeld(); placeCd = 0.25;
+  }
 });
 document.addEventListener('mouseup', (e) => {
   if (e.button === 0) breakingHeld = false;
-  if (e.button === 2) placingHeld = false;
+  if (e.button === 2) { placingHeld = false; player.shielding = false; }
   // mouse side buttons would navigate back/forward and dump you out of the game
   if ((e.button === 3 || e.button === 4) && (isLocked() || invOpen)) e.preventDefault();
 });

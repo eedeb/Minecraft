@@ -18,7 +18,7 @@ A 3D Minecraft clone that runs entirely in the browser. No build step, no depend
 - **Food & cooking** — mobs drop raw meat; cook it in a furnace for much better food (plus apples and questionable rotten flesh)
 - **Furnaces & smelting** — craft a furnace (8 cobblestone), fuel it with coal/charcoal/wood, and smelt raw iron & gold → ingots, sand → glass, cobblestone → stone → smooth stone, clay → bricks, netherrack → nether bricks, logs → charcoal; furnaces keep burning while you play
 - **Buckets** — scoop and pour water and lava (lava lakes lurk in the deepest caves — it burns, but it's also a 100-smelt fuel)
-- **Armor** — craft iron and diamond armor sets; equip them in dedicated slots to reduce combat and burn damage
+- **Armor & shields** — craft iron and diamond armor sets; equip them in dedicated slots to reduce combat and burn damage. Craft a shield from planks and an iron ingot.
 - **Obsidian & nether portals** — pour water on lava to make obsidian (diamond pickaxe to mine), build a portal frame, light it with flint and steel (iron + coal), and step through
 - **The Nether** — a cavernous netherrack dimension with a lava ocean, quartz ore, glowstone clusters on the ceiling, and **blazes** that hover and hurl fireballs; distance scales 1:8, and blaze rods make great furnace fuel
 - **Ender pearls & endermen** — tall, night-spawning endermen drop pearls and teleport away when struck; throw pearls (right-click) to teleport yourself
@@ -46,7 +46,7 @@ A 3D Minecraft clone that runs entirely in the browser. No build step, no depend
 | **Ctrl / double-tap W** | Sprint (on Windows, use fullscreen or double-tap W — windowed Ctrl+W closes the tab) |
 | **⛶ Fullscreen button** | Fullscreen + keyboard lock — captures most browser shortcuts while playing |
 | **Hold left click** | Mine block / attack mob |
-| **Right click** | Place block / eat food / use crafting table |
+| **Right click** | Place block / eat food / use crafting table; hold with a shield selected to block attacks |
 | **E** | Open inventory & 2×2 crafting |
 | **Q / Ctrl+Q** | Drop one / whole stack (held or hovered item) |
 | **Middle click** | Pick targeted block |
