@@ -21,7 +21,7 @@ export const I = {
   BLAZE_POWDER: 245, EYE_OF_ENDER: 246,
   STRING: 247, BOW: 248, ARROW: 249,
   GOLD_INGOT: 250, RAW_GOLD: 251, REDSTONE: 252, LAPIS: 253, EMERALD: 254, QUARTZ: 255,
-  GUNPOWDER: 256, SHIELD: 257,
+  GUNPOWDER: 256, SHIELD: 257, FISHING_ROD: 258, RAW_FISH: 259,
 };
 
 export const ARMOR_SLOTS = ['head', 'chest', 'legs', 'feet'];
@@ -72,6 +72,8 @@ ITEMS[I.EYE_OF_ENDER] = mat('Eye of Ender', 'eye'); // sockets into End portal f
 ITEMS[I.STRING] = mat('String', 'material'); // dropped by spiders
 ITEMS[I.GUNPOWDER] = mat('Gunpowder', 'material'); // dropped by creepers
 ITEMS[I.SHIELD] = mat('Shield', 'shield', { stack: 1 });
+ITEMS[I.FISHING_ROD] = mat('Fishing Rod', 'fishing_rod', { stack: 1 });
+ITEMS[I.RAW_FISH] = mat('Raw Fish', 'food', { hunger: 2, sat: 1.2 });
 ITEMS[I.BOW] = mat('Bow', 'bow', { stack: 1 }); // right-click to shoot arrows
 ITEMS[I.ARROW] = mat('Arrow', 'material');
 ITEMS[I.BUCKET] = mat('Bucket', 'bucket', { liquid: null, stack: 1 });
@@ -354,6 +356,7 @@ export const RECIPES = [
   shaped(I.SHIELD, 1, ['PIP', 'PPP', '.P.'], { P: B.PLANK, I: I.IRON_INGOT }),
   shapeless(I.FLINT_STEEL, 1, [I.IRON_INGOT, I.COAL]),
   shaped(I.BOW, 1, ['.ST', 'S.T', '.ST'], { S: I.STICK, T: I.STRING }),
+  shaped(I.FISHING_ROD, 1, ['..S', '.ST', 'S.T'], { S: I.STICK, T: I.STRING }),
   shaped(I.ARROW, 4, ['..S', '.S.', 'S..'], { S: I.STICK }),
   shaped(B.CHEST, 1, ['PPP', 'P.P', 'PPP'], { P: B.PLANK }),
   shaped(B.BED, 1, ['WWW', 'PPP'], { W: B.WOOL, P: B.PLANK }),
@@ -619,6 +622,10 @@ ITEM_STENCILS[I.STRING] = {
     '...ddd......', '......s.....', '.......s....', '............',
   ],
   pal: { s: '#e8e8e8', d: '#c2c2c2' },
+};
+ITEM_STENCILS[I.FISHING_ROD] = {
+  rows: ['......mmm...', '.....m..m...', '....m...m...', '...m....m...', '..m.....m...', '.m......m...', 'm.......m...', '........m...', '.........m..', '..........m.', '...........m.', '............'],
+  pal: { m: '#8a5d2e' },
 };
 ITEM_STENCILS[I.BOW] = {
   rows: [

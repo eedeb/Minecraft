@@ -1911,6 +1911,7 @@ function liquidTarget() {
   return null;
 }
 
+let fishingCastAt = null;
 function useHeld() {
   if (player.dead || invOpen) return;
   const hit = currentTarget();
@@ -1959,6 +1960,27 @@ function useHeld() {
   const id = heldId();
   const it = ITEMS[id];
   if (!it) return;
+
+  if (it.kind === 'fishing_rod') {
+    swingT = 0;
+    if (fishingCastAt !== null) {
+      if (simTime - fishingCastAt < 2) { toast('Waiting for a bite…', 1); return; }
+      fishingCastAt = null;
+      const fish = Math.random() < 0.8 ? I.RAW_FISH : I.STRING;
+      const left = inventory.add(fish, 1);
+      if (left) drops.spawn(fish, left, player.pos.x, player.pos.y + 0.5, player.pos.z);
+      inventory._c();
+      toast(fish === I.RAW_FISH ? 'You caught a fish!' : 'You reeled in some string!', 1.5);
+      sfx.splash();
+      return;
+    }
+    const water = liquidTarget();
+    if (!water || water.id !== B.WATER) { toast('Aim at open water to cast', 1.5); return; }
+    fishingCastAt = simTime;
+    toast('Fishing line cast — wait for a bite', 1.5);
+    sfx.splash();
+    return;
+  }
 
   if (it.kind === 'block') {
     if (!hit) return;
